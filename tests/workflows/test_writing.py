@@ -126,10 +126,10 @@ def test_pass_calls_writer_and_critic_once_and_never_calls_editor() -> None:
     assert writer.calls == [task]
     assert critic.calls == [(task, "Exact first draft")]
     assert editor.calls == []
-    assert result.first_draft == "Exact first draft"
+    assert result.writer_output == "Exact first draft"
     assert result.critic_report is report
-    assert result.updated_draft is None
-    assert result.final_draft == result.first_draft
+    assert result.working_draft == result.writer_output
+    assert result.revision_applied is False
 
 
 def test_revise_calls_editor_exactly_once_with_exact_inputs() -> None:
@@ -149,10 +149,10 @@ def test_revise_calls_editor_exactly_once_with_exact_inputs() -> None:
     assert writer.calls == [task]
     assert critic.calls == [(task, "Exact first draft")]
     assert editor.calls == [(task, "Exact first draft", report)]
-    assert result.first_draft == "Exact first draft"
+    assert result.writer_output == "Exact first draft"
     assert result.critic_report is report
-    assert result.updated_draft == "Exact updated draft"
-    assert result.final_draft == result.updated_draft
+    assert result.working_draft == "Exact updated draft"
+    assert result.revision_applied is True
 
 
 @pytest.mark.parametrize("output", ["", " ", None, 42])
@@ -243,10 +243,30 @@ def test_execute_does_not_mutate_task() -> None:
     assert task is before
     assert task == make_task()
     assert task.status is WritingTaskStatus.CREATED
-    assert task.first_draft is None
+    assert task.working_draft is None
     assert task.critic_report is None
-    assert task.updated_draft is None
-    assert task.final_draft is None
+
+
+def test_existing_working_draft_reaches_writer_unchanged() -> None:
+    task = WritingTask(
+        id="task-1",
+        conversation_id="conversation-1",
+        brief=WritingBrief("Revise the current copy."),
+        status=WritingTaskStatus.AWAITING_USER_EVALUATION,
+        created_at=NOW,
+        updated_at=NOW,
+        working_draft="Existing canonical copy",
+        critic_report=pass_report(),
+    )
+    workflow, writer, critic, _ = make_workflow(writer_output="New Writer output")
+
+    result = workflow.execute(task)
+
+    assert writer.calls == [task]
+    assert writer.calls[0].working_draft == "Existing canonical copy"
+    assert critic.calls == [(task, "New Writer output")]
+    assert task.working_draft == "Existing canonical copy"
+    assert result.working_draft == "New Writer output"
 
 
 def test_workflow_instances_do_not_share_mutable_state() -> None:

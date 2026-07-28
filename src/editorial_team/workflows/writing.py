@@ -31,21 +31,23 @@ class WritingWorkflow:
         if not isinstance(task, WritingTask):
             raise WritingWorkflowError("Invalid writing task")
 
-        first_draft = self._write(task)
-        report = self._review(task, first_draft)
+        writer_output = self._write(task)
+        report = self._review(task, writer_output)
 
         if report.verdict is CriticVerdict.PASS:
             return self._build_result(
-                first_draft=first_draft,
+                writer_output=writer_output,
                 report=report,
-                updated_draft=None,
+                working_draft=writer_output,
+                revision_applied=False,
             )
 
-        updated_draft = self._revise(task, first_draft, report)
+        working_draft = self._revise(task, writer_output, report)
         return self._build_result(
-            first_draft=first_draft,
+            writer_output=writer_output,
             report=report,
-            updated_draft=updated_draft,
+            working_draft=working_draft,
+            revision_applied=True,
         )
 
     def _write(self, task: WritingTask) -> str:
@@ -84,12 +86,12 @@ class WritingWorkflow:
         report: CriticReport,
     ) -> str:
         try:
-            updated_draft = self._editor.revise(task, draft, report)
+            working_draft = self._editor.revise(task, draft, report)
         except Exception:
             raise WritingWorkflowError("Editor failed") from None
 
-        self._validate_text_output(updated_draft, participant="Editor")
-        return updated_draft
+        self._validate_text_output(working_draft, participant="Editor")
+        return working_draft
 
     @staticmethod
     def _validate_text_output(value: object, *, participant: str) -> None:
@@ -101,17 +103,17 @@ class WritingWorkflow:
     @staticmethod
     def _build_result(
         *,
-        first_draft: str,
+        writer_output: str,
         report: CriticReport,
-        updated_draft: str | None,
+        working_draft: str,
+        revision_applied: bool,
     ) -> EditorialResult:
-        final_draft = first_draft if updated_draft is None else updated_draft
         try:
             return EditorialResult(
-                first_draft=first_draft,
+                writer_output=writer_output,
                 critic_report=report,
-                updated_draft=updated_draft,
-                final_draft=final_draft,
+                working_draft=working_draft,
+                revision_applied=revision_applied,
             )
         except (TypeError, ValueError):
             raise WritingWorkflowError("Writing workflow produced an invalid result") from None

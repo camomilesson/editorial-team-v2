@@ -108,35 +108,28 @@ class CriticReport:
 class EditorialResult:
     """Final output and review details for one editorial attempt."""
 
-    first_draft: str
+    writer_output: str
     critic_report: CriticReport
-    final_draft: str
-    updated_draft: str | None = None
+    working_draft: str
+    revision_applied: bool
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "first_draft",
-            require_non_blank(self.first_draft, "first_draft"),
-        )
+        require_non_blank(self.writer_output, "writer_output")
         if not isinstance(self.critic_report, CriticReport):
             raise ValueError("critic_report must be a CriticReport")
-        object.__setattr__(
-            self,
-            "final_draft",
-            require_non_blank(self.final_draft, "final_draft"),
-        )
-        if self.updated_draft is None:
-            if self.final_draft != self.first_draft:
-                raise ValueError("final_draft must equal first_draft without an updated_draft")
+        require_non_blank(self.working_draft, "working_draft")
+        if not isinstance(self.revision_applied, bool):
+            raise ValueError("revision_applied must be a boolean")
+        if self.critic_report.verdict is CriticVerdict.PASS:
+            if self.revision_applied:
+                raise ValueError("a passing result must not apply a revision")
+            if self.working_draft != self.writer_output:
+                raise ValueError("a passing result must use writer_output as working_draft")
+        elif self.critic_report.verdict is CriticVerdict.REVISE:
+            if not self.revision_applied:
+                raise ValueError("a revise result must apply a revision")
         else:
-            object.__setattr__(
-                self,
-                "updated_draft",
-                require_non_blank(self.updated_draft, "updated_draft"),
-            )
-            if self.final_draft != self.updated_draft:
-                raise ValueError("final_draft must equal updated_draft when one is present")
+            raise ValueError("critic_report must contain a supported verdict")
 
 
 @dataclass(frozen=True)
@@ -149,10 +142,8 @@ class WritingTask:
     status: WritingTaskStatus
     created_at: datetime
     updated_at: datetime
-    first_draft: str | None = None
+    working_draft: str | None = None
     critic_report: CriticReport | None = None
-    updated_draft: str | None = None
-    final_draft: str | None = None
     user_evaluation: str | None = None
 
     def __post_init__(self) -> None:
@@ -170,14 +161,33 @@ class WritingTask:
         require_utc_timestamp(self.updated_at, "updated_at")
         if self.updated_at < self.created_at:
             raise ValueError("updated_at must not be earlier than created_at")
+        if self.working_draft is not None:
+            require_non_blank(self.working_draft, "working_draft")
         if self.critic_report is not None and not isinstance(self.critic_report, CriticReport):
             raise ValueError("critic_report must be a CriticReport")
-        for field_name in (
-            "first_draft",
-            "updated_draft",
-            "final_draft",
-            "user_evaluation",
-        ):
-            value = getattr(self, field_name)
-            if value is not None:
-                object.__setattr__(self, field_name, require_non_blank(value, field_name))
+        if self.user_evaluation is not None:
+            object.__setattr__(
+                self,
+                "user_evaluation",
+                require_non_blank(self.user_evaluation, "user_evaluation"),
+            )
+
+        produced_text_statuses = {
+            WritingTaskStatus.DRAFTED,
+            WritingTaskStatus.REVIEWED,
+            WritingTaskStatus.REVISED,
+            WritingTaskStatus.AWAITING_USER_EVALUATION,
+            WritingTaskStatus.APPROVED,
+        }
+        reviewed_statuses = {
+            WritingTaskStatus.REVIEWED,
+            WritingTaskStatus.REVISED,
+            WritingTaskStatus.AWAITING_USER_EVALUATION,
+            WritingTaskStatus.APPROVED,
+        }
+        if self.status in produced_text_statuses and self.working_draft is None:
+            raise ValueError(f"{self.status.value} tasks require working_draft")
+        if self.status in reviewed_statuses and self.critic_report is None:
+            raise ValueError(f"{self.status.value} tasks require critic_report")
+        if self.status is WritingTaskStatus.APPROVED and self.user_evaluation is None:
+            raise ValueError("approved tasks require user_evaluation")
