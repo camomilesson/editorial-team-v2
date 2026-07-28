@@ -17,6 +17,7 @@ venv/
 # Test and lint caches
 .pytest_cache/
 .ruff_cache/
+.uv-cache/
 .coverage
 htmlcov/
 

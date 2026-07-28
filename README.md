@@ -3,8 +3,7 @@
 Provider-neutral infrastructure for a conversational editorial assistant.
 
 This foundation contains model-client boundaries, a Gemini adapter, validation helpers,
-sanitized errors, and a generic tool registry. Product behavior and orchestration are
-intentionally out of scope at this stage.
+sanitized errors, and a generic tool registry. Product behavior is intentionally out of scope.
 
 ## Development
 
