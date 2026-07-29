@@ -11,6 +11,7 @@ from editorial_team.domain.editorial import (
     WritingTask,
 )
 from editorial_team.errors import ServiceError
+from editorial_team.tracing import error_category, set_trace_stage, trace_event
 
 
 class WritingWorkflowError(ServiceError):
@@ -51,21 +52,53 @@ class WritingWorkflow:
         )
 
     def _write(self, task: WritingTask) -> str:
+        set_trace_stage("writer")
+        trace_event("writer_started", stage="writer")
         try:
             draft = self._writer.write(task)
-        except Exception:
+        except Exception as exc:
+            trace_event(
+                "writer_failed",
+                stage="writer",
+                outcome="failed",
+                error_category=error_category(exc),
+            )
             raise WritingWorkflowError("Writer failed") from None
 
-        self._validate_text_output(draft, participant="Writer")
+        try:
+            self._validate_text_output(draft, participant="Writer")
+        except WritingWorkflowError:
+            trace_event(
+                "writer_failed",
+                stage="writer",
+                outcome="failed",
+                error_category="blank_response",
+            )
+            raise
+        trace_event("writer_completed", stage="writer", outcome="completed")
         return draft
 
     def _review(self, task: WritingTask, draft: str) -> CriticReport:
+        set_trace_stage("critic")
+        trace_event("critic_started", stage="critic")
         try:
             report = self._critic.review(task, draft)
-        except Exception:
+        except Exception as exc:
+            trace_event(
+                "critic_failed",
+                stage="critic",
+                outcome="failed",
+                error_category=error_category(exc),
+            )
             raise WritingWorkflowError("Critic failed") from None
 
         if not isinstance(report, CriticReport):
+            trace_event(
+                "critic_failed",
+                stage="critic",
+                outcome="failed",
+                error_category="schema_validation_failure",
+            )
             raise WritingWorkflowError("Critic returned an invalid report")
 
         try:
@@ -75,8 +108,20 @@ class WritingWorkflow:
                 issues=report.issues,
             )
         except (TypeError, ValueError):
+            trace_event(
+                "critic_failed",
+                stage="critic",
+                outcome="failed",
+                error_category="domain_consistency_failure",
+            )
             raise WritingWorkflowError("Critic returned an invalid report") from None
 
+        trace_event(
+            "critic_completed",
+            stage="critic",
+            outcome="completed",
+            critic_verdict=report.verdict,
+        )
         return report
 
     def _revise(
@@ -85,12 +130,30 @@ class WritingWorkflow:
         draft: str,
         report: CriticReport,
     ) -> str:
+        set_trace_stage("editor")
+        trace_event("editor_started", stage="editor")
         try:
             working_draft = self._editor.revise(task, draft, report)
-        except Exception:
+        except Exception as exc:
+            trace_event(
+                "editor_failed",
+                stage="editor",
+                outcome="failed",
+                error_category=error_category(exc),
+            )
             raise WritingWorkflowError("Editor failed") from None
 
-        self._validate_text_output(working_draft, participant="Editor")
+        try:
+            self._validate_text_output(working_draft, participant="Editor")
+        except WritingWorkflowError:
+            trace_event(
+                "editor_failed",
+                stage="editor",
+                outcome="failed",
+                error_category="blank_response",
+            )
+            raise
+        trace_event("editor_completed", stage="editor", outcome="completed")
         return working_draft
 
     @staticmethod

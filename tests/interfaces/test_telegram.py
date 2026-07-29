@@ -152,6 +152,8 @@ def test_unsupported_updates_are_ignored(update: FakeUpdate) -> None:
 def test_service_failure_sends_and_logs_only_sanitized_details(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    caplog.set_level("INFO", logger="editorial_team.live_trace")
+
     class FailingService:
         def process_message(self, conversation_id: str, text: str) -> tuple[Message, ...]:
             raise RuntimeError("provider secret and full draft diagnostics")
@@ -165,7 +167,7 @@ def test_service_failure_sends_and_logs_only_sanitized_details(
     assert "secret" not in str(ctx.bot.sent)
     assert "diagnostics" not in str(ctx.bot.sent)
     assert "update_id=99" in caplog.text
-    assert "category=RuntimeError" in caplog.text
+    assert "error_category=runtime_error" in caplog.text
     assert "secret" not in caplog.text
     assert "full draft" not in caplog.text
 

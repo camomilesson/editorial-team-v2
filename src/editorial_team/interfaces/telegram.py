@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Sequence
 
 from telegram import Update
@@ -18,15 +17,20 @@ from telegram.ext import (
 
 from editorial_team.conversation import ConversationService
 from editorial_team.domain.conversation import Message
+from editorial_team.tracing import (
+    bind_turn_trace,
+    current_trace_stage,
+    error_category,
+    set_trace_stage,
+    trace_event,
+    trace_for_update,
+)
 
 MAX_TELEGRAM_TEXT_LENGTH = 4096
 ONBOARDING_MESSAGE = (
     "Hi — just message me normally. I can chat with you or help draft and revise text."
 )
 GENERIC_TURN_ERROR = "Sorry — I couldn’t complete that turn. Please try again."
-
-logger = logging.getLogger(__name__)
-
 
 def conversation_id_for_chat(chat_id: int) -> str:
     """Convert a Telegram chat identifier into a stable opaque identifier."""
@@ -113,27 +117,55 @@ class TelegramAdapter:
         ):
             return
 
-        async with self._turn_lock:
-            try:
-                assistant_messages = await asyncio.to_thread(
-                    self._service.process_message,
-                    conversation_id_for_chat(chat.id),
-                    message.text,
-                )
-            except Exception as exc:
-                logger.warning(
-                    "telegram_turn_failed category=%s update_id=%s",
-                    type(exc).__name__,
-                    update.update_id,
-                )
-                await context.bot.send_message(chat_id=chat.id, text=GENERIC_TURN_ERROR)
-                return
+        trace = trace_for_update(update.update_id)
+        with bind_turn_trace(trace):
+            trace_event("telegram_turn_started", stage="telegram")
+            async with self._turn_lock:
+                try:
+                    assistant_messages = await asyncio.to_thread(
+                        self._service.process_message,
+                        conversation_id_for_chat(chat.id),
+                        message.text,
+                    )
+                except Exception as exc:
+                    trace_event(
+                        "telegram_turn_failed",
+                        stage=current_trace_stage(),
+                        outcome="failed",
+                        error_category=error_category(exc),
+                    )
+                    await context.bot.send_message(chat_id=chat.id, text=GENERIC_TURN_ERROR)
+                    return
 
-            await self._send_messages(
-                chat_id=chat.id,
-                messages=assistant_messages,
-                context=context,
-            )
+                set_trace_stage("assistant_delivery")
+                trace_event(
+                    "assistant_delivery_started",
+                    stage="assistant_delivery",
+                    assistant_message_count=len(assistant_messages),
+                )
+                try:
+                    chunk_count = await self._send_messages(
+                        chat_id=chat.id,
+                        messages=assistant_messages,
+                        context=context,
+                    )
+                except Exception as exc:
+                    trace_event(
+                        "telegram_turn_failed",
+                        stage="assistant_delivery",
+                        outcome="failed",
+                        error_category=error_category(exc),
+                    )
+                    raise
+                trace_event(
+                    "assistant_delivery_completed",
+                    stage="assistant_delivery",
+                    outcome="completed",
+                    assistant_message_count=len(assistant_messages),
+                    chunk_count=chunk_count,
+                )
+                set_trace_stage("telegram")
+                trace_event("telegram_turn_completed", stage="telegram", outcome="completed")
 
     @staticmethod
     async def _send_messages(
@@ -141,10 +173,13 @@ class TelegramAdapter:
         chat_id: int,
         messages: Sequence[Message],
         context: ContextTypes.DEFAULT_TYPE,
-    ) -> None:
+    ) -> int:
+        chunk_count = 0
         for message in messages:
             for chunk in chunk_text(message.content):
                 await context.bot.send_message(chat_id=chat_id, text=chunk)
+                chunk_count += 1
+        return chunk_count
 
 
 def build_telegram_application(

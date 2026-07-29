@@ -34,6 +34,12 @@ from editorial_team.domain.editorial import (
 )
 from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
 from editorial_team.errors import ServiceError
+from editorial_team.tracing import (
+    current_trace_stage,
+    error_category,
+    set_trace_stage,
+    trace_event,
+)
 
 IdentifierGenerator = Callable[[], str]
 UtcClock = Callable[[], datetime]
@@ -91,6 +97,7 @@ class ConversationService:
             recent_messages=(*state.recent_messages, user_message),
         )
         decision = self._decide(state_with_user, user_message)
+        trace_event("route_started", route=decision.route)
 
         if decision.route is CoordinatorRoute.CHAT:
             routed_state, contents = self._chat(state_with_user, user_message)
@@ -143,11 +150,31 @@ class ConversationService:
         state: ConversationState,
         user_message: Message,
     ) -> CoordinatorDecision:
+        set_trace_stage("coordinator")
+        trace_event(
+            "coordinator_started",
+            active_task=state.active_task is not None,
+            task_status=(
+                None if state.active_task is None else state.active_task.status
+            ),
+        )
         try:
             decision = self._coordinator.decide(state, user_message)
-        except Exception:
+        except Exception as exc:
+            trace_event(
+                "coordinator_failed",
+                stage="coordinator",
+                outcome="failed",
+                error_category=error_category(exc),
+            )
             raise ConversationServiceError("Coordinator failed") from None
         if not isinstance(decision, CoordinatorDecision):
+            trace_event(
+                "coordinator_failed",
+                stage="coordinator",
+                outcome="failed",
+                error_category="schema_validation_failure",
+            )
             raise ConversationServiceError("Coordinator returned an invalid decision")
         try:
             CoordinatorDecision(
@@ -157,7 +184,18 @@ class ConversationService:
                 revision_instructions=decision.revision_instructions,
             )
         except (TypeError, ValueError):
+            trace_event(
+                "coordinator_failed",
+                stage="coordinator",
+                outcome="failed",
+                error_category="domain_consistency_failure",
+            )
             raise ConversationServiceError("Coordinator returned an invalid decision") from None
+        trace_event(
+            "coordinator_completed",
+            route=decision.route,
+            outcome="completed",
+        )
         return decision
 
     def _chat(
@@ -165,6 +203,7 @@ class ConversationService:
         state: ConversationState,
         user_message: Message,
     ) -> tuple[ConversationState, tuple[str, ...]]:
+        set_trace_stage("talker")
         response = self._talk(state, user_message)
         return state, (response,)
 
@@ -173,6 +212,8 @@ class ConversationService:
         state: ConversationState,
         decision: CoordinatorDecision,
     ) -> tuple[ConversationState, tuple[str, ...]]:
+        set_trace_stage("writing_workflow")
+        trace_event("writing_workflow_started", stage="writing_workflow")
         if decision.task_input is None:
             raise ConversationServiceError("Writing task input is invalid")
         timestamp = self._timestamp()
@@ -185,6 +226,14 @@ class ConversationService:
             updated_at=timestamp,
         )
         result = self._execute_workflow(task)
+        set_trace_stage("writing_workflow")
+        trace_event(
+            "writing_workflow_completed",
+            stage="writing_workflow",
+            outcome="completed",
+            critic_verdict=result.critic_report.verdict,
+            revision_applied=result.revision_applied,
+        )
         active_task = WritingTask(
             id=task.id,
             conversation_id=task.conversation_id,
@@ -207,6 +256,8 @@ class ConversationService:
         state: ConversationState,
         user_message: Message,
     ) -> tuple[ConversationState, tuple[str, ...]]:
+        set_trace_stage("approval")
+        trace_event("approval_started", stage="approval")
         task = self._require_awaiting_task(state, require_draft=True)
         approved_task = replace(
             task,
@@ -220,6 +271,8 @@ class ConversationService:
             active_task=approved_task,
         )
         acknowledgement = self._talk(routed_state, user_message)
+        set_trace_stage("approval")
+        trace_event("approval_completed", stage="approval", outcome="completed")
         return routed_state, (acknowledgement,)
 
     def _revise_task(
@@ -227,6 +280,8 @@ class ConversationService:
         state: ConversationState,
         decision: CoordinatorDecision,
     ) -> tuple[ConversationState, tuple[str, ...]]:
+        set_trace_stage("revision_workflow")
+        trace_event("revision_workflow_started", stage="revision_workflow")
         task = self._require_awaiting_task(state, require_draft=True)
         if decision.revision_instructions is None:
             raise ConversationServiceError("Revision instructions are invalid")
@@ -244,6 +299,14 @@ class ConversationService:
             raise ConversationServiceError("Revision task is invalid") from None
 
         result = self._execute_workflow(workflow_task)
+        set_trace_stage("revision_workflow")
+        trace_event(
+            "revision_workflow_completed",
+            stage="revision_workflow",
+            outcome="completed",
+            critic_verdict=result.critic_report.verdict,
+            revision_applied=result.revision_applied,
+        )
         active_task = replace(
             workflow_task,
             status=WritingTaskStatus.AWAITING_USER_EVALUATION,
@@ -279,9 +342,22 @@ class ConversationService:
     def _execute_workflow(self, task: WritingTask) -> EditorialResult:
         try:
             result = self._workflow.execute(task)
-        except Exception:
+        except Exception as exc:
+            trace_event(
+                "writing_workflow_failed",
+                stage=current_trace_stage(),
+                outcome="failed",
+                error_category=error_category(exc),
+            )
             raise ConversationServiceError("Writing workflow failed") from None
+        set_trace_stage("writing_workflow")
         if not isinstance(result, EditorialResult):
+            trace_event(
+                "writing_workflow_failed",
+                stage="writing_workflow",
+                outcome="failed",
+                error_category="schema_validation_failure",
+            )
             raise ConversationServiceError("Writing workflow returned an invalid result")
         try:
             CriticReport(
@@ -296,18 +372,39 @@ class ConversationService:
                 revision_applied=result.revision_applied,
             )
         except (TypeError, ValueError):
+            trace_event(
+                "writing_workflow_failed",
+                stage="writing_workflow",
+                outcome="failed",
+                error_category="domain_consistency_failure",
+            )
             raise ConversationServiceError("Writing workflow returned an invalid result") from None
         return result
 
     def _talk(self, state: ConversationState, user_message: Message) -> str:
+        set_trace_stage("talker")
+        trace_event("talker_started", stage="talker")
         try:
             response = self._talker.respond(state, user_message)
-        except Exception:
+        except Exception as exc:
+            trace_event(
+                "talker_failed",
+                stage="talker",
+                outcome="failed",
+                error_category=error_category(exc),
+            )
             raise ConversationServiceError("Talker failed") from None
         try:
             require_non_blank(response, "response")
         except ValueError:
+            trace_event(
+                "talker_failed",
+                stage="talker",
+                outcome="failed",
+                error_category="blank_response",
+            )
             raise ConversationServiceError("Talker returned an invalid response") from None
+        trace_event("talker_completed", stage="talker", outcome="completed")
         return response
 
     def _writing_messages(self, result: EditorialResult) -> tuple[str, ...]:
