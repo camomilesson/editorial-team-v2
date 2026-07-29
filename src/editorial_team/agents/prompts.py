@@ -5,8 +5,51 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from editorial_team.contracts.common import timestamp_to_json
 from editorial_team.domain.conversation import ConversationState, Message
 from editorial_team.domain.editorial import CriticReport, WritingTask
+from editorial_team.operations.models import OperationalSnapshot
+from editorial_team.operations.policy import AdminPolicy
+
+
+def admin_prompt(snapshot: OperationalSnapshot, policy: AdminPolicy) -> str:
+    """Build the capability-restricted operational watchdog prompt."""
+
+    context = {
+        "snapshot": {
+            "observed_at": timestamp_to_json(snapshot.observed_at),
+            "worker_running": snapshot.worker_running,
+            "queue_depth": snapshot.queue_depth,
+            "queue_capacity": snapshot.queue_capacity,
+            "completed_jobs": snapshot.completed_jobs,
+            "failed_jobs": snapshot.failed_jobs,
+            "last_success_at": (
+                None
+                if snapshot.last_success_at is None
+                else timestamp_to_json(snapshot.last_success_at)
+            ),
+        },
+        "policy": {
+            "failure_threshold": policy.failure_threshold,
+            "queue_pressure_ratio": policy.queue_pressure_ratio,
+            "priority_order": [
+                "worker_stopped",
+                "repeated_failures",
+                "queue_pressure",
+                "system_healthy",
+            ],
+        },
+    }
+    return _prompt(
+        instructions=(
+            "You are Admin, the operational watchdog for Editorial Team. You see only safe "
+            "runtime metadata. Apply the supplied policy exactly in its stated priority order. "
+            "Return only the requested JSON object with decision and reason_code. Do not infer "
+            "anything about users or editorial content. Do not propose repairs, actions, "
+            "rationale, explanations, or notification text."
+        ),
+        context=context,
+    )
 
 
 def coordinator_prompt(state: ConversationState, user_message: Message) -> str:

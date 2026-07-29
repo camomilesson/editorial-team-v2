@@ -28,7 +28,8 @@ def main() -> None:
         raise SystemExit(2) from None
 
     logging.getLogger(__name__).info(
-        "telegram_bot_started model=%s persistence=in-memory recent_message_limit=%d "
+        "telegram_bot_started model=%s conversation_persistence=in-memory "
+        "recent_message_limit=%d "
         "processing=one-in-flight-turn",
         live.model_name,
         RECENT_MESSAGE_LIMIT,

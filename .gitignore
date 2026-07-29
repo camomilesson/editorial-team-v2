@@ -21,6 +21,12 @@ venv/
 .coverage
 htmlcov/
 
+# Local runtime databases
+runtime_data/
+*.db
+*.db-shm
+*.db-wal
+
 # Editors and operating systems
 .vscode/
 .idea/
