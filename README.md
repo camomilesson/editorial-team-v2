@@ -68,6 +68,24 @@ not real-time workflow streaming.
 
 This smoke test is manual and is not performed by the automated test suite.
 
+## Operational decision storage
+
+SQLite has one narrow role: durable storage of future heartbeat/Admin decisions.
+Both `SILENCE` and `NOTIFY` outcomes are stored. `SILENCE` produces no Telegram
+output; a future `NOTIFY` flow will alert one configured maintainer destination
+and record whether that notification was sent. No heartbeat scheduler, AdminAgent,
+or notification delivery is implemented yet.
+
+The illustrative local path is `runtime_data/editorial_team.db`, but callers inject
+the database path explicitly. The synchronous repository must be called from future
+async application code through one explicit nonblocking boundary such as
+`asyncio.to_thread`.
+
+This database stores no user messages, identities, prompts, conversations, writing
+tasks, drafts, Critic reports, or raw model output. It is not queue persistence:
+the runtime queue and normal Telegram conversation state remain in memory and reset
+when the process restarts.
+
 ## Structured-output reliability
 
 The Coordinator and Critic request provider-native, JSON Schema-constrained output.
