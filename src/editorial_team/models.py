@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections import deque
 from collections.abc import Iterable
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeAlias
 
@@ -13,6 +14,28 @@ ToolSchema: TypeAlias = dict[str, Any]
 
 class ModelClientError(RuntimeError):
     """Raised when a model client cannot produce a valid response."""
+
+
+@dataclass(frozen=True, init=False)
+class StructuredOutputSpec:
+    """Provider-neutral request for output constrained by a JSON schema."""
+
+    mime_type: str
+    _schema: dict[str, Any]
+
+    def __init__(self, mime_type: str, schema: dict[str, Any]) -> None:
+        _require_non_empty_string(mime_type, "mime_type")
+        if not isinstance(schema, dict):
+            raise ValueError("schema must be an object")
+        _require_json_value(schema, "schema")
+        object.__setattr__(self, "mime_type", mime_type)
+        object.__setattr__(self, "_schema", deepcopy(schema))
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        """Return a defensive copy of the requested JSON schema."""
+
+        return deepcopy(self._schema)
 
 
 def _require_non_empty_string(value: object, field_name: str) -> None:
@@ -67,6 +90,7 @@ class ModelRequest:
     input: ModelInput
     tools: tuple[ToolSchema, ...] = ()
     continuation_token: str | None = None
+    structured_output: StructuredOutputSpec | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.input, str):
@@ -84,6 +108,10 @@ class ModelRequest:
 
         if self.continuation_token is not None:
             _require_non_empty_string(self.continuation_token, "continuation_token")
+        if self.structured_output is not None and not isinstance(
+            self.structured_output, StructuredOutputSpec
+        ):
+            raise ValueError("structured_output must be a StructuredOutputSpec")
 
 
 @dataclass(frozen=True)

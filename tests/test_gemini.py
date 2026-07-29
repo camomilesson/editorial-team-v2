@@ -7,7 +7,12 @@ from editorial_team.gemini import (
     GeminiModelClient,
     create_gemini_client_from_env,
 )
-from editorial_team.models import ModelClientError, ModelRequest, ToolResult
+from editorial_team.models import (
+    ModelClientError,
+    ModelRequest,
+    StructuredOutputSpec,
+    ToolResult,
+)
 
 
 class FakeInteractions:
@@ -82,6 +87,40 @@ def test_converts_tool_results_to_gemini_input() -> None:
             "result": [{"type": "text", "text": '{"found": true}'}],
         }
     ]
+
+
+def test_forwards_structured_output_in_interactions_format() -> None:
+    interaction = SimpleNamespace(id="structured", output_text='{"ok":true}', steps=[])
+    interactions = FakeInteractions(interaction)
+    client = GeminiModelClient(sdk_client=sdk_with(interactions))
+    schema = {
+        "type": "object",
+        "properties": {"ok": {"type": "boolean"}},
+        "required": ["ok"],
+        "additionalProperties": False,
+    }
+
+    response = client.respond(
+        ModelRequest(
+            "Return JSON",
+            tools=({"name": "lookup", "parameters": {"type": "object"}},),
+            continuation_token="previous",
+            structured_output=StructuredOutputSpec("application/json", schema),
+        )
+    )
+
+    assert response.text == '{"ok":true}'
+    assert interactions.kwargs == {
+        "model": DEFAULT_GEMINI_MODEL,
+        "input": "Return JSON",
+        "tools": [{"name": "lookup", "parameters": {"type": "object"}}],
+        "previous_interaction_id": "previous",
+        "response_format": {
+            "type": "text",
+            "mime_type": "application/json",
+            "schema_": schema,
+        },
+    }
 
 
 @pytest.mark.parametrize(

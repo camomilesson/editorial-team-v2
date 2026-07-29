@@ -10,6 +10,10 @@ from editorial_team.agents import (
     LlmTalker,
     LlmWriter,
 )
+from editorial_team.agents.schemas import (
+    COORDINATOR_STRUCTURED_OUTPUT,
+    CRITIC_STRUCTURED_OUTPUT,
+)
 from editorial_team.conversation import ConversationService, InMemoryConversationStateStore
 from editorial_team.domain.conversation import ConversationState, ConversationStatus
 from editorial_team.domain.editorial import (
@@ -182,6 +186,23 @@ def test_start_writing_pass_completes_with_expected_order() -> None:
     assert state is not None
     assert state.active_task is not None
     assert state.active_task.working_draft == "Writer output"
+    assert writer.requests[0].structured_output is None
+    assert critic.requests[0].structured_output == CRITIC_STRUCTURED_OUTPUT
+
+
+def test_real_structured_agents_attach_their_provider_neutral_specs() -> None:
+    service, _, coordinator, _, _, critic, _ = build_service(
+        coordinator_responses=[
+            decision("start_writing_task", task_input="Write a launch post.")
+        ],
+        writer_responses=[response("Writer output")],
+        critic_responses=[report("pass")],
+    )
+
+    service.process_message("conversation-1", "Write a launch post")
+
+    assert coordinator.requests[0].structured_output == COORDINATOR_STRUCTURED_OUTPUT
+    assert critic.requests[0].structured_output == CRITIC_STRUCTURED_OUTPUT
 
 
 def test_start_writing_revise_completes_optional_editor_pass() -> None:

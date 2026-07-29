@@ -51,3 +51,11 @@ slow; it is not the final queue design.
    intentionally in memory.
 
 This smoke test is manual and is not performed by the automated test suite.
+
+## Structured-output reliability
+
+The Coordinator and Critic request provider-native, JSON Schema-constrained output.
+Their responses still pass through the application's strict JSON parser, domain
+validation, and, for Critic issues, grounded-excerpt validation. The Talker, Writer,
+and Editor continue to return plain text. Schema constraints improve formatting
+reliability but do not make semantic agent output infallible.

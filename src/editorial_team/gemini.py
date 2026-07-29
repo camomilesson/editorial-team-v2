@@ -55,6 +55,13 @@ class GeminiModelClient:
         if request.continuation_token:
             kwargs["previous_interaction_id"] = request.continuation_token
 
+        if request.structured_output is not None:
+            kwargs["response_format"] = {
+                "type": "text",
+                "mime_type": request.structured_output.mime_type,
+                "schema_": request.structured_output.schema,
+            }
+
         try:
             interaction = self._client.interactions.create(**kwargs)
             tool_calls = tuple(

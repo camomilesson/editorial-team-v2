@@ -13,14 +13,27 @@ from editorial_team.domain.editorial import (
     CriticVerdict,
 )
 from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
-from editorial_team.models import ModelClient, ModelRequest, ModelResponse
+from editorial_team.models import (
+    ModelClient,
+    ModelRequest,
+    ModelResponse,
+    StructuredOutputSpec,
+)
 
 
-def execute_text(model: ModelClient, prompt: str, role: str) -> str:
+def execute_text(
+    model: ModelClient,
+    prompt: str,
+    role: str,
+    *,
+    structured_output: StructuredOutputSpec | None = None,
+) -> str:
     """Execute one bounded model request and return plain nonblank text."""
 
     try:
-        response = model.respond(ModelRequest(input=prompt))
+        response = model.respond(
+            ModelRequest(input=prompt, structured_output=structured_output)
+        )
     except Exception:
         raise AgentError(f"{role} model call failed") from None
     if (

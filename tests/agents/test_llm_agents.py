@@ -14,6 +14,10 @@ from editorial_team.agents import (
     LlmTalker,
     LlmWriter,
 )
+from editorial_team.agents.schemas import (
+    COORDINATOR_STRUCTURED_OUTPUT,
+    CRITIC_STRUCTURED_OUTPUT,
+)
 from editorial_team.domain.conversation import (
     ConversationState,
     ConversationStatus,
@@ -172,6 +176,7 @@ def test_coordinator_prompt_contains_safe_ordered_state_and_short_reply_context(
     assert "do not answer the user" in prompt.lower()
     assert "ConversationState(" not in prompt
     assert "message-old" not in prompt
+    assert model.requests[0].structured_output == COORDINATOR_STRUCTURED_OUTPUT
 
 
 def test_coordinator_preserves_approval_plus_change_as_revision_input() -> None:
@@ -234,6 +239,7 @@ def test_talker_includes_relevant_context_and_returns_exact_text_without_mutatio
     assert '"original_request": "Write a launch announcement."' in prompt
     assert '"working_draft"' not in prompt
     assert current_state == snapshot
+    assert model.requests[0].structured_output is None
 
 
 @pytest.mark.parametrize(
@@ -264,6 +270,7 @@ def test_writer_receives_initial_context_and_returns_exact_draft() -> None:
     assert '"instructions": ["Use a warm tone.", "Keep it concise."]' in prompt
     assert '"current_working_draft": null' in prompt
     assert writing_task == snapshot
+    assert model.requests[0].structured_output is None
 
 
 def test_writer_receives_existing_working_draft() -> None:
@@ -302,6 +309,7 @@ def test_critic_parses_valid_pass_and_supplies_exact_context() -> None:
     assert '"instructions": ["Use a warm tone.", "Keep it concise."]' in prompt
     assert writing_task == snapshot
     assert draft == "Exact supplied draft."
+    assert model.requests[0].structured_output == CRITIC_STRUCTURED_OUTPUT
 
 
 def test_critic_parses_revise_issues_and_accepts_grounded_excerpt() -> None:
@@ -404,6 +412,7 @@ def test_editor_receives_exact_draft_report_and_task_context_without_mutation() 
     assert '"current_working_draft": "Earlier canonical draft"' in prompt
     assert writing_task == task_snapshot
     assert report == report_snapshot
+    assert model.requests[0].structured_output is None
 
 
 @pytest.mark.parametrize(
