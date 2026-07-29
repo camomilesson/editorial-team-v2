@@ -1,11 +1,10 @@
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, fields
 from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
 from editorial_team.domain.conversation import (
     ConversationState,
-    ConversationStatus,
     Message,
     MessageRole,
 )
@@ -36,7 +35,6 @@ def test_constructs_every_conversation_model() -> None:
     state = ConversationState(
         conversation_id="conversation-1",
         recent_messages=(message,),
-        status=ConversationStatus.AWAITING_USER_EVALUATION,
         active_task=make_task(),
     )
 
@@ -52,6 +50,11 @@ def test_conversation_allows_optional_task_state() -> None:
 
     assert without_task.active_task is None
     assert with_task.active_task.id == "task-1"
+    assert {field.name for field in fields(ConversationState)} == {
+        "conversation_id",
+        "recent_messages",
+        "active_task",
+    }
 
 
 def test_conversation_message_defaults_are_isolated_and_immutable() -> None:

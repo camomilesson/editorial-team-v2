@@ -1,42 +1,60 @@
-"""Stable transport-neutral formatting for writing-cycle messages."""
+"""Stable transport-neutral formatting for visible agent messages."""
 
 from __future__ import annotations
 
 from editorial_team.domain.editorial import CriticReport, EditorialResult
 
 
-def format_critic_report(report: CriticReport) -> str:
-    """Render a critic report without implementation-specific representations."""
+def format_agent_message(agent: str, content: str) -> str:
+    """Render one visible agent heading and body."""
 
-    lines = [
-        f"Critic verdict: {report.verdict.value.upper()}",
+    return f"{agent}\n\n{content}"
+
+
+def format_talker_message(content: str) -> str:
+    """Render one Talker response."""
+
+    return format_agent_message("Talker", content)
+
+
+def format_writer_message(content: str) -> str:
+    """Render exact Writer output."""
+
+    return format_agent_message("Writer", content)
+
+
+def format_critic_report(report: CriticReport) -> str:
+    """Render a Critic report with readable, ordered issue fields."""
+
+    sections = [
+        f"Verdict: {report.verdict.value.upper()}",
         f"Summary: {report.summary}",
     ]
-    if report.issues:
-        lines.append("Issues:")
-        for index, issue in enumerate(report.issues, start=1):
-            lines.append(f"{index}. Severity: {issue.severity.value.upper()}")
-            if issue.location is not None:
-                lines.append(f"   Location: {issue.location}")
-            lines.append(f"   Problem: {issue.problem}")
-            if issue.suggestion is not None:
-                lines.append(f"   Suggestion: {issue.suggestion}")
-            if issue.grounded_excerpt is not None:
-                lines.append(f"   Grounded excerpt: {issue.grounded_excerpt}")
-    else:
-        lines.append("Issues: None")
-    return "\n".join(lines)
+    if not report.issues:
+        sections.append("Issues: None")
+        return format_agent_message("Critic", "\n\n".join(sections))
+
+    issue_sections: list[str] = []
+    for index, issue in enumerate(report.issues, start=1):
+        fields = [f"{index}. Severity: {issue.severity.value.upper()}"]
+        if issue.location is not None:
+            fields.append(f"Location: {issue.location}")
+        fields.append(f"Problem: {issue.problem}")
+        if issue.suggestion is not None:
+            fields.append(f"Suggestion: {issue.suggestion}")
+        if issue.grounded_excerpt is not None:
+            fields.append(f"Grounded excerpt: {issue.grounded_excerpt}")
+        issue_sections.append("\n\n".join(fields))
+    sections.append("Issues:\n\n" + "\n\n".join(issue_sections))
+    return format_agent_message("Critic", "\n\n".join(sections))
 
 
-def format_working_draft(result: EditorialResult) -> str:
-    """Render the canonical draft outcome of a writing cycle."""
+def format_editor_message(result: EditorialResult) -> str:
+    """Render revised output or the deterministic PASS handoff."""
 
-    if result.revision_applied:
-        return f"Revised working draft:\n{result.working_draft}"
-    return "The Writer output is now the working draft."
-
-
-def request_user_evaluation() -> str:
-    """Return the stable evaluation request shown after a writing cycle."""
-
-    return "Please review the working draft and tell me whether you approve it or want changes."
+    content = (
+        result.working_draft
+        if result.revision_applied
+        else "Working draft approved, see above."
+    )
+    return format_agent_message("Editor", content)

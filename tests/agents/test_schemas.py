@@ -32,7 +32,6 @@ def validate(schema: dict[str, object], payload: dict[str, object]) -> None:
             "task_input": "Write a post.",
             "revision_instructions": None,
         },
-        {"route": "approve_task", "confidence": 0.8},
         {
             "route": "revise_task",
             "confidence": 0.7,
@@ -55,6 +54,11 @@ def test_coordinator_schema_matches_domain_enums_and_optional_keys() -> None:
     assert properties["task_input"]["type"] == ["string", "null"]
     assert properties["revision_instructions"]["type"] == ["string", "null"]
     assert COORDINATOR_DECISION_SCHEMA["additionalProperties"] is False
+    assert properties["route"]["enum"] == [
+        "chat",
+        "start_writing_task",
+        "revise_task",
+    ]
 
 
 @pytest.mark.parametrize(

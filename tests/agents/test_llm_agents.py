@@ -20,7 +20,6 @@ from editorial_team.agents.schemas import (
 )
 from editorial_team.domain.conversation import (
     ConversationState,
-    ConversationStatus,
     Message,
     MessageRole,
 )
@@ -47,7 +46,7 @@ def task(*, working_draft: str | None = None) -> WritingTask:
     status = WritingTaskStatus.CREATED
     report = None
     if working_draft is not None:
-        status = WritingTaskStatus.AWAITING_USER_EVALUATION
+        status = WritingTaskStatus.REVIEWED
         report = CriticReport(CriticVerdict.PASS, "Previous review passed.")
     return WritingTask(
         id="task-1",
@@ -88,11 +87,6 @@ def state(*, awaiting: bool = False) -> ConversationState:
     return ConversationState(
         "conversation-1",
         recent_messages=messages,
-        status=(
-            ConversationStatus.AWAITING_USER_EVALUATION
-            if awaiting
-            else ConversationStatus.CHATTING
-        ),
         active_task=task(working_draft="Current draft") if awaiting else None,
     )
 
@@ -125,12 +119,6 @@ def coordinator_json(
             None,
         ),
         (
-            coordinator_json("approve_task"),
-            CoordinatorRoute.APPROVE_TASK,
-            None,
-            None,
-        ),
-        (
             coordinator_json(
                 "revise_task",
                 revision_instructions="good, but change the opening",
@@ -157,7 +145,7 @@ def test_coordinator_parses_all_routes_and_exact_payloads(
 
 
 def test_coordinator_prompt_contains_safe_ordered_state_and_short_reply_context() -> None:
-    model = FakeModelClient([response(coordinator_json("approve_task"))])
+    model = FakeModelClient([response(coordinator_json("chat"))])
     agent = LlmCoordinator(model)
     current_state = state(awaiting=True)
     message = user_message("good")
@@ -168,18 +156,17 @@ def test_coordinator_prompt_contains_safe_ordered_state_and_short_reply_context(
     assert isinstance(prompt, str)
     assert "APPLICATION INSTRUCTIONS" in prompt
     assert "UNTRUSTED APPLICATION DATA" in prompt
-    assert '"conversation_status": "awaiting_user_evaluation"' in prompt
     assert prompt.index("Earlier assistant reply.") < prompt.index('"content": "good"')
     assert '"new_user_message": "good"' in prompt
     assert '"working_draft": "Current draft"' in prompt
-    assert "use revise_task" in prompt.lower()
+    assert "uses revise_task" in prompt.lower()
     assert "do not answer the user" in prompt.lower()
     assert "ConversationState(" not in prompt
     assert "message-old" not in prompt
     assert model.requests[0].structured_output == COORDINATOR_STRUCTURED_OUTPUT
 
 
-def test_coordinator_preserves_approval_plus_change_as_revision_input() -> None:
+def test_coordinator_preserves_praise_plus_change_as_revision_input() -> None:
     instruction = "good, but change the opening"
     model = FakeModelClient(
         [
@@ -200,7 +187,7 @@ def test_coordinator_preserves_approval_plus_change_as_revision_input() -> None:
     prompt = model.requests[0].input
     assert isinstance(prompt, str)
     assert f'"new_user_message": "{instruction}"' in prompt
-    assert "approval language includes a requested change" in prompt
+    assert "direct instruction to change the latest draft" in prompt
 
 
 @pytest.mark.parametrize(
@@ -240,6 +227,9 @@ def test_talker_includes_relevant_context_and_returns_exact_text_without_mutatio
     assert '"working_draft"' not in prompt
     assert current_state == snapshot
     assert model.requests[0].structured_output is None
+    assert "Talker, the conversational member of Editorial Team" in prompt
+    assert "Do not ask for formal approval" in prompt
+    assert "never drag an old draft into an unrelated greeting" in prompt
 
 
 @pytest.mark.parametrize(

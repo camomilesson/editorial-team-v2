@@ -17,8 +17,6 @@ class WritingTaskStatus(StrEnum):
     DRAFTED = "drafted"
     REVIEWED = "reviewed"
     REVISED = "revised"
-    AWAITING_USER_EVALUATION = "awaiting_user_evaluation"
-    APPROVED = "approved"
 
 
 @dataclass(frozen=True)
@@ -144,7 +142,6 @@ class WritingTask:
     updated_at: datetime
     working_draft: str | None = None
     critic_report: CriticReport | None = None
-    user_evaluation: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "id", validate_identifier(self.id, "id"))
@@ -165,29 +162,16 @@ class WritingTask:
             require_non_blank(self.working_draft, "working_draft")
         if self.critic_report is not None and not isinstance(self.critic_report, CriticReport):
             raise ValueError("critic_report must be a CriticReport")
-        if self.user_evaluation is not None:
-            object.__setattr__(
-                self,
-                "user_evaluation",
-                require_non_blank(self.user_evaluation, "user_evaluation"),
-            )
-
         produced_text_statuses = {
             WritingTaskStatus.DRAFTED,
             WritingTaskStatus.REVIEWED,
             WritingTaskStatus.REVISED,
-            WritingTaskStatus.AWAITING_USER_EVALUATION,
-            WritingTaskStatus.APPROVED,
         }
         reviewed_statuses = {
             WritingTaskStatus.REVIEWED,
             WritingTaskStatus.REVISED,
-            WritingTaskStatus.AWAITING_USER_EVALUATION,
-            WritingTaskStatus.APPROVED,
         }
         if self.status in produced_text_statuses and self.working_draft is None:
             raise ValueError(f"{self.status.value} tasks require working_draft")
         if self.status in reviewed_statuses and self.critic_report is None:
             raise ValueError(f"{self.status.value} tasks require critic_report")
-        if self.status is WritingTaskStatus.APPROVED and self.user_evaluation is None:
-            raise ValueError("approved tasks require user_evaluation")

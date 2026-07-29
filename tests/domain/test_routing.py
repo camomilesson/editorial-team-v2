@@ -5,6 +5,14 @@ import pytest
 from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
 
 
+def test_coordinator_routes_are_exactly_chat_start_and_revise() -> None:
+    assert {route.value for route in CoordinatorRoute} == {
+        "chat",
+        "start_writing_task",
+        "revise_task",
+    }
+
+
 @pytest.mark.parametrize(
     "decision",
     [
@@ -14,7 +22,6 @@ from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
             1.0,
             task_input="Write a product announcement.",
         ),
-        CoordinatorDecision(CoordinatorRoute.APPROVE_TASK, 0.9),
         CoordinatorDecision(
             CoordinatorRoute.REVISE_TASK,
             0.75,
@@ -50,11 +57,6 @@ def test_confidence_must_be_finite_and_between_zero_and_one(confidence: float) -
             revision_instructions="Change it.",
         ),
         lambda: CoordinatorDecision(CoordinatorRoute.CHAT, 0.8, task_input="Write this."),
-        lambda: CoordinatorDecision(
-            CoordinatorRoute.APPROVE_TASK,
-            0.8,
-            revision_instructions="Change it.",
-        ),
     ],
 )
 def test_route_payload_consistency(decision: object) -> None:

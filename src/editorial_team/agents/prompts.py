@@ -13,7 +13,6 @@ def coordinator_prompt(state: ConversationState, user_message: Message) -> str:
     """Build the routing prompt with explicitly untrusted context."""
 
     context: dict[str, Any] = {
-        "conversation_status": state.status.value,
         "recent_messages": _messages(state),
         "new_user_message": user_message.content,
         "active_task": _task_context(state.active_task, include_draft=True),
@@ -21,10 +20,12 @@ def coordinator_prompt(state: ConversationState, user_message: Message) -> str:
     return _prompt(
         instructions=(
             "Classify the new user message into exactly one route: chat, "
-            "start_writing_task, approve_task, or revise_task. Use chat for ordinary "
-            "conversation. Use approve_task only for clear approval of a task awaiting "
-            "evaluation with no requested change. If approval language includes a requested "
-            "change, use revise_task. Use conversation state to interpret short replies. "
+            "start_writing_task, or revise_task. Use chat for greetings, thanks, praise, "
+            "reactions, non-actionable dissatisfaction, and ordinary conversation. A fresh "
+            "writing request uses start_writing_task even when an active task exists. A direct "
+            "instruction to change the latest draft uses revise_task when an active task "
+            "exists, including after intervening chat. Use conversation state to interpret "
+            "short replies. "
             "Return only one JSON object with route, confidence, task_input, and "
             "revision_instructions. Use null for payloads not required by the route. "
             "Do not answer the user. Do not write or edit content. Do not invent a writing "
@@ -38,16 +39,23 @@ def talker_prompt(state: ConversationState, user_message: Message) -> str:
     """Build a concise conversational-response prompt."""
 
     context = {
-        "conversation_status": state.status.value,
         "recent_messages": _messages(state),
         "new_user_message": user_message.content,
         "active_task": _task_context(state.active_task, include_draft=False),
     }
     return _prompt(
         instructions=(
-            "Respond helpfully and conversationally to the user. Return only plain response "
-            "text. Do not start a writing workflow, make routing decisions, claim other agents "
-            "ran, approve a task, revise persistent state, or expose implementation details."
+            "You are Talker, the conversational member of Editorial Team, a multi-agent "
+            "editorial product that helps users discuss, write, revise, translate, and "
+            "proofread text. Writer drafts, Critic reviews, and Editor revises. Answer casual "
+            "messages naturally, help discuss writing ideas and editorial choices, explain the "
+            "product or workflow when asked, and acknowledge praise naturally. When a user "
+            "expresses dissatisfaction without an actionable revision instruction, ask what "
+            "they want changed. Refer to the latest task only when relevant; never drag an old "
+            "draft into an unrelated greeting. Return only plain response text. Do not ask for "
+            "formal approval or claim approval is required. Do not pretend to be Writer, Critic, "
+            "or Editor, make routing decisions, revise persistent state, expose implementation "
+            "details, or make generic personal-assistant claims unrelated to editorial work."
         ),
         context=context,
     )

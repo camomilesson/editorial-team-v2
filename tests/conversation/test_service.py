@@ -7,12 +7,16 @@ from typing import Any
 
 import pytest
 
-from editorial_team.conversation.formatting import format_critic_report
+from editorial_team.conversation.formatting import (
+    format_critic_report,
+    format_editor_message,
+    format_talker_message,
+    format_writer_message,
+)
 from editorial_team.conversation.service import ConversationService, ConversationServiceError
 from editorial_team.conversation.store import InMemoryConversationStateStore
 from editorial_team.domain.conversation import (
     ConversationState,
-    ConversationStatus,
     Message,
     MessageRole,
 )
@@ -68,7 +72,7 @@ def awaiting_task(
         id=task_id,
         conversation_id="conversation-1",
         brief=WritingBrief("Original request", instructions),
-        status=WritingTaskStatus.AWAITING_USER_EVALUATION,
+        status=WritingTaskStatus.REVIEWED,
         created_at=BASE_TIME,
         updated_at=BASE_TIME,
         working_draft="Existing copy",
@@ -79,7 +83,6 @@ def awaiting_task(
 def awaiting_state(*, task: WritingTask | None = None) -> ConversationState:
     return ConversationState(
         "conversation-1",
-        status=ConversationStatus.AWAITING_USER_EVALUATION,
         active_task=task or awaiting_task(),
     )
 
@@ -197,7 +200,7 @@ def test_chat_creates_conversation_and_saves_once() -> None:
     assert store.loads == ["conversation-1"]
     assert len(store.saves) == 1
     assert len(returned) == 1
-    assert returned[0].content == "Hello there."
+    assert returned[0].content == "Talker\n\nHello there."
     assert returned[0].role is MessageRole.ASSISTANT
     assert returned[0].id == "generated-2"
     assert returned[0].created_at == BASE_TIME + timedelta(seconds=1)
@@ -232,7 +235,7 @@ def test_invalid_user_input_fails_before_load_or_save(
     assert store.saves == []
 
 
-def test_chat_continues_existing_state_and_preserves_awaiting_task() -> None:
+def test_chat_continues_existing_state_and_preserves_latest_task() -> None:
     original = awaiting_state()
     service, _, talker, _, store = make_service(
         CoordinatorDecision(CoordinatorRoute.CHAT, 0.8),
@@ -242,7 +245,6 @@ def test_chat_continues_existing_state_and_preserves_awaiting_task() -> None:
     service.process_message("conversation-1", "What is the weather like?")
 
     saved = store.saves[0]
-    assert saved.status is ConversationStatus.AWAITING_USER_EVALUATION
     assert saved.active_task is original.active_task
     assert talker.calls[0][0].active_task is original.active_task
     assert original.recent_messages == ()
@@ -283,18 +285,16 @@ def test_start_pass_creates_task_and_orders_messages() -> None:
     assert workflow_task.status is WritingTaskStatus.CREATED
     assert workflow_task.working_draft is None
     assert [message.content for message in returned] == [
-        "Writer output:\nExact Writer output",
+        format_writer_message(result.writer_output),
         format_critic_report(result.critic_report),
-        "The Writer output is now the working draft.",
-        "Please review the working draft and tell me whether you approve it or want changes.",
+        format_editor_message(result),
     ]
     saved = store.saves[0]
-    assert saved.status is ConversationStatus.AWAITING_USER_EVALUATION
     assert saved.active_task is not None
     assert saved.active_task.id == workflow_task.id
     assert saved.active_task.working_draft == "Exact Writer output"
     assert saved.active_task.critic_report is result.critic_report
-    assert saved.active_task.user_evaluation is None
+    assert saved.active_task.status is WritingTaskStatus.REVIEWED
 
 
 def test_start_revise_distinguishes_writer_and_editor_outputs() -> None:
@@ -307,8 +307,9 @@ def test_start_revise_distinguishes_writer_and_editor_outputs() -> None:
 
     returned = service.process_message("conversation-1", "Write it")
 
-    assert returned[0].content == "Writer output:\nWriter copy"
-    assert returned[2].content == "Revised working draft:\nEditor copy"
+    assert returned[0].content == "Writer\n\nWriter copy"
+    assert returned[2].content == "Editor\n\nEditor copy"
+    assert len(returned) == 3
     assert store.saves[0].active_task.working_draft == "Editor copy"  # type: ignore[union-attr]
 
 
@@ -323,57 +324,6 @@ def test_start_replaces_previous_active_task() -> None:
     service.process_message("conversation-1", "Start something new")
 
     assert store.saves[0].active_task.id == "generated-2"  # type: ignore[union-attr]
-
-
-def test_approve_preserves_draft_and_report_and_skips_workflow() -> None:
-    original = awaiting_state()
-    service, _, talker, workflow, store = make_service(
-        CoordinatorDecision(CoordinatorRoute.APPROVE_TASK, 0.95),
-        state=original,
-        talker_output="Approved. The draft is ready.",
-    )
-
-    returned = service.process_message("conversation-1", "I approve this exactly.")
-
-    saved = store.saves[0]
-    approved = saved.active_task
-    assert approved is not None
-    assert approved.status is WritingTaskStatus.APPROVED
-    assert approved.working_draft == original.active_task.working_draft  # type: ignore[union-attr]
-    assert approved.critic_report is original.active_task.critic_report  # type: ignore[union-attr]
-    assert approved.user_evaluation == "I approve this exactly."
-    assert approved.brief is original.active_task.brief  # type: ignore[union-attr]
-    assert approved.id == original.active_task.id  # type: ignore[union-attr]
-    assert approved.created_at == original.active_task.created_at  # type: ignore[union-attr]
-    assert saved.status is ConversationStatus.CHATTING
-    assert returned[0].content == "Approved. The draft is ready."
-    assert len(talker.calls) == 1
-    assert talker.calls[0][0].active_task is approved
-    assert workflow.calls == []
-
-
-@pytest.mark.parametrize(
-    "state",
-    [
-        ConversationState("conversation-1"),
-        ConversationState(
-            "conversation-1",
-            status=ConversationStatus.CHATTING,
-            active_task=awaiting_task(),
-        ),
-    ],
-)
-def test_invalid_approval_state_fails_without_save(state: ConversationState) -> None:
-    service, _, _, workflow, store = make_service(
-        CoordinatorDecision(CoordinatorRoute.APPROVE_TASK, 1.0),
-        state=state,
-    )
-
-    with pytest.raises(ConversationServiceError, match="No writing task"):
-        service.process_message("conversation-1", "Approved")
-
-    assert workflow.calls == []
-    assert store.saves == []
 
 
 @pytest.mark.parametrize("result", [pass_result("New Writer copy"), revise_result()])
@@ -413,16 +363,15 @@ def test_revision_runs_normal_workflow_and_replaces_canonical_state(
     assert saved_task.id == old_task.id
     assert saved_task.working_draft == result.working_draft
     assert saved_task.critic_report is result.critic_report
-    assert saved_task.user_evaluation is None
-    assert saved_task.status is WritingTaskStatus.AWAITING_USER_EVALUATION
-    assert store.saves[0].status is ConversationStatus.AWAITING_USER_EVALUATION
-    assert returned[0].content == f"Writer output:\n{result.writer_output}"
-    expected_third = (
-        f"Revised working draft:\n{result.working_draft}"
+    expected_status = (
+        WritingTaskStatus.REVISED
         if result.revision_applied
-        else "The Writer output is now the working draft."
+        else WritingTaskStatus.REVIEWED
     )
-    assert returned[2].content == expected_third
+    assert saved_task.status is expected_status
+    assert len(returned) == 3
+    assert returned[0].content == format_writer_message(result.writer_output)
+    assert returned[2].content == format_editor_message(result)
 
 
 def test_revision_without_active_task_fails_without_save() -> None:
@@ -477,14 +426,15 @@ def test_malformed_coordinator_decision_is_rejected_without_save() -> None:
 def test_critic_formatting_is_deterministic_and_omits_absent_optional_fields() -> None:
     full = format_critic_report(revise_report())
     assert full == (
-        "Critic verdict: REVISE\n"
-        "Summary: One change is needed.\n"
-        "Issues:\n"
-        "1. Severity: MAJOR\n"
-        "   Location: Opening\n"
-        "   Problem: The opening is vague.\n"
-        "   Suggestion: Name the benefit.\n"
-        "   Grounded excerpt: Something new."
+        "Critic\n\n"
+        "Verdict: REVISE\n\n"
+        "Summary: One change is needed.\n\n"
+        "Issues:\n\n"
+        "1. Severity: MAJOR\n\n"
+        "Location: Opening\n\n"
+        "Problem: The opening is vague.\n\n"
+        "Suggestion: Name the benefit.\n\n"
+        "Grounded excerpt: Something new."
     )
     minimal = CriticReport(
         CriticVerdict.REVISE,
@@ -492,13 +442,40 @@ def test_critic_formatting_is_deterministic_and_omits_absent_optional_fields() -
         (CriticIssue(CriticIssueSeverity.MINOR, "Typo."),),
     )
     assert format_critic_report(minimal) == (
-        "Critic verdict: REVISE\n"
-        "Summary: Fix one issue.\n"
-        "Issues:\n"
-        "1. Severity: MINOR\n"
-        "   Problem: Typo."
+        "Critic\n\n"
+        "Verdict: REVISE\n\n"
+        "Summary: Fix one issue.\n\n"
+        "Issues:\n\n"
+        "1. Severity: MINOR\n\n"
+        "Problem: Typo."
     )
     assert format_critic_report(pass_report()).endswith("Issues: None")
+
+
+def test_critic_formatting_preserves_multiple_issue_order() -> None:
+    report = CriticReport(
+        CriticVerdict.REVISE,
+        "Two changes are needed.",
+        (
+            CriticIssue(CriticIssueSeverity.MAJOR, "First problem."),
+            CriticIssue(
+                CriticIssueSeverity.MINOR,
+                "Second problem.",
+                suggestion="Fix second.",
+            ),
+        ),
+    )
+
+    formatted = format_critic_report(report)
+
+    assert formatted.index("1. Severity: MAJOR") < formatted.index(
+        "2. Severity: MINOR"
+    )
+    assert "Problem: First problem.\n\n2. Severity: MINOR" in formatted
+    assert "Suggestion: Fix second." in formatted
+    assert "Location:" not in formatted
+    assert "Grounded excerpt:" not in formatted
+    assert "None" not in formatted
 
 
 def test_recent_messages_trim_oldest_without_affecting_task() -> None:
@@ -525,7 +502,7 @@ def test_recent_messages_trim_oldest_without_affecting_task() -> None:
     assert [message.content for message in saved.recent_messages] == [
         "Old 2",
         "New",
-        "Acknowledged.",
+        format_talker_message("Acknowledged."),
     ]
     assert saved.active_task is original.active_task
     assert len(original.recent_messages) == 3
@@ -564,7 +541,7 @@ def test_store_isolates_conversations_and_uses_defensive_copies() -> None:
 
     corrupted = store.load("conversation-1")
     assert corrupted is not None
-    object.__setattr__(corrupted, "status", ConversationStatus.AWAITING_USER_EVALUATION)
+    object.__setattr__(corrupted, "recent_messages", ())
     assert store.load("conversation-1") == one
 
 
@@ -701,4 +678,26 @@ def test_loaded_state_is_not_mutated_when_route_fails() -> None:
         service.process_message("conversation-1", "Input")
 
     assert original == snapshot
+    assert store.saves == []
+
+
+def test_failed_revision_does_not_overwrite_latest_task() -> None:
+    original = awaiting_state()
+    snapshot = deepcopy(original)
+    service, _, _, workflow, store = make_service(
+        CoordinatorDecision(
+            CoordinatorRoute.REVISE_TASK,
+            1.0,
+            revision_instructions="Make it shorter.",
+        ),
+        state=original,
+        workflow_output=RuntimeError("failure"),
+    )
+
+    with pytest.raises(ConversationServiceError, match="Writing workflow failed"):
+        service.process_message("conversation-1", "Make it shorter")
+
+    assert len(workflow.calls) == 1
+    assert original == snapshot
+    assert store.state == original
     assert store.saves == []

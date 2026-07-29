@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
-from telegram.constants import ChatType
+from telegram.constants import ChatAction, ChatType
 
 from editorial_team.domain.conversation import Message, MessageRole
 from editorial_team.interfaces.telegram import (
+    DEFAULT_HANDOFF_DELAY_SECONDS,
     GENERIC_TURN_ERROR,
     MAX_TELEGRAM_TEXT_LENGTH,
     ONBOARDING_MESSAGE,
@@ -53,9 +55,27 @@ class FakeUpdate:
 class FakeBot:
     def __init__(self) -> None:
         self.sent: list[dict[str, object]] = []
+        self.actions: list[dict[str, object]] = []
+        self.events: list[tuple[str, object]] = []
 
     async def send_message(self, **kwargs: object) -> None:
         self.sent.append(kwargs)
+        self.events.append(("message", kwargs["text"]))
+
+    async def send_chat_action(self, **kwargs: object) -> None:
+        self.actions.append(kwargs)
+        self.events.append(("action", kwargs["action"]))
+
+
+class RecordingSleeper:
+    def __init__(self, events: list[tuple[str, object]] | None = None) -> None:
+        self.calls: list[float] = []
+        self.events = events
+
+    async def __call__(self, delay: float) -> None:
+        self.calls.append(delay)
+        if self.events is not None:
+            self.events.append(("sleep", delay))
 
 
 class RecordingService:
@@ -88,18 +108,28 @@ def test_conversation_identifier_is_stable_and_opaque() -> None:
         conversation_id_for_chat(True)
 
 
-def test_ordinary_text_reaches_service_once_and_messages_are_sent_in_order() -> None:
+@pytest.mark.parametrize("delay", [-1, math.nan, math.inf, True, "slow"])
+def test_handoff_delay_must_be_a_non_negative_finite_number(delay: object) -> None:
+    with pytest.raises(ValueError, match="handoff_delay"):
+        TelegramAdapter(RecordingService(), handoff_delay=delay)  # type: ignore[arg-type]
+
+
+def test_three_agent_messages_are_staged_in_order() -> None:
     service = RecordingService(
         (
             assistant("Writer output", 1),
             assistant("Critic evaluation", 2),
-            assistant("Working draft", 3),
-            assistant("Evaluation request", 4),
+            assistant("Editor output", 3),
         )
     )
-    adapter = TelegramAdapter(service)  # type: ignore[arg-type]
-    update = private_update()
     ctx = context()
+    sleeper = RecordingSleeper(ctx.bot.events)
+    adapter = TelegramAdapter(  # type: ignore[arg-type]
+        service,
+        handoff_delay=0.25,
+        sleeper=sleeper,
+    )
+    update = private_update()
 
     asyncio.run(adapter.handle_text(update, ctx))  # type: ignore[arg-type]
 
@@ -107,23 +137,53 @@ def test_ordinary_text_reaches_service_once_and_messages_are_sent_in_order() -> 
     assert [item["text"] for item in ctx.bot.sent] == [
         "Writer output",
         "Critic evaluation",
-        "Working draft",
-        "Evaluation request",
+        "Editor output",
     ]
     assert all(item["chat_id"] == 123 for item in ctx.bot.sent)
+    assert ctx.bot.events == [
+        ("message", "Writer output"),
+        ("action", ChatAction.TYPING),
+        ("sleep", 0.25),
+        ("message", "Critic evaluation"),
+        ("action", ChatAction.TYPING),
+        ("sleep", 0.25),
+        ("message", "Editor output"),
+    ]
+    assert sleeper.calls == [0.25, 0.25]
+
+
+def test_one_talker_message_has_no_handoff_delay() -> None:
+    service = RecordingService((assistant("Talker response"),))
+    ctx = context()
+    sleeper = RecordingSleeper(ctx.bot.events)
+    adapter = TelegramAdapter(service, sleeper=sleeper)  # type: ignore[arg-type]
+
+    asyncio.run(adapter.handle_text(private_update(), ctx))  # type: ignore[arg-type]
+
+    assert [item["text"] for item in ctx.bot.sent] == ["Talker response"]
+    assert ctx.bot.actions == []
+    assert sleeper.calls == []
 
 
 def test_chunks_preserve_order_across_application_messages() -> None:
     first = "A" * (MAX_TELEGRAM_TEXT_LENGTH + 2)
     service = RecordingService((assistant(first, 1), assistant("Second", 2)))
-    adapter = TelegramAdapter(service)  # type: ignore[arg-type]
     ctx = context()
+    sleeper = RecordingSleeper(ctx.bot.events)
+    adapter = TelegramAdapter(service, sleeper=sleeper)  # type: ignore[arg-type]
 
     asyncio.run(adapter.handle_text(private_update(), ctx))  # type: ignore[arg-type]
 
     sent = [item["text"] for item in ctx.bot.sent]
     assert "".join(sent[:2]) == first
     assert sent[2] == "Second"
+    assert ctx.bot.events[:2] == [
+        ("message", first[:MAX_TELEGRAM_TEXT_LENGTH]),
+        ("message", first[MAX_TELEGRAM_TEXT_LENGTH:]),
+    ]
+    assert ctx.bot.events[2] == ("action", ChatAction.TYPING)
+    assert ctx.bot.events[3] == ("sleep", DEFAULT_HANDOFF_DELAY_SECONDS)
+    assert sleeper.calls == [DEFAULT_HANDOFF_DELAY_SECONDS]
 
 
 @pytest.mark.parametrize(
@@ -140,7 +200,7 @@ def test_chunks_preserve_order_across_application_messages() -> None:
 )
 def test_unsupported_updates_are_ignored(update: FakeUpdate) -> None:
     service = RecordingService()
-    adapter = TelegramAdapter(service)  # type: ignore[arg-type]
+    adapter = TelegramAdapter(service, handoff_delay=0)  # type: ignore[arg-type]
     ctx = context()
 
     asyncio.run(adapter.handle_text(update, ctx))  # type: ignore[arg-type]
@@ -158,7 +218,7 @@ def test_service_failure_sends_and_logs_only_sanitized_details(
         def process_message(self, conversation_id: str, text: str) -> tuple[Message, ...]:
             raise RuntimeError("provider secret and full draft diagnostics")
 
-    adapter = TelegramAdapter(FailingService())  # type: ignore[arg-type]
+    adapter = TelegramAdapter(FailingService(), handoff_delay=0)  # type: ignore[arg-type]
     ctx = context()
 
     asyncio.run(adapter.handle_text(private_update(), ctx))  # type: ignore[arg-type]
@@ -180,6 +240,7 @@ def test_start_is_platform_onboarding_only() -> None:
     asyncio.run(adapter.start(private_update("/start"), ctx))  # type: ignore[arg-type]
 
     assert ctx.bot.sent == [{"chat_id": 123, "text": ONBOARDING_MESSAGE}]
+    assert ONBOARDING_MESSAGE.startswith("Talker\n\n")
     assert service.calls == []
 
 
@@ -241,7 +302,7 @@ def test_two_updates_are_serialized_in_processing_order() -> None:
 
     async def scenario() -> tuple[BlockingService, FakeBot]:
         service = BlockingService()
-        adapter = TelegramAdapter(service)  # type: ignore[arg-type]
+        adapter = TelegramAdapter(service, handoff_delay=0)  # type: ignore[arg-type]
         ctx = context()
         first = asyncio.create_task(
             adapter.handle_text(private_update("first"), ctx)  # type: ignore[arg-type]

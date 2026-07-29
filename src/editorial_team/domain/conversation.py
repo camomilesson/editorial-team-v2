@@ -41,20 +41,12 @@ class Message:
         require_utc_timestamp(self.created_at, "created_at")
 
 
-class ConversationStatus(StrEnum):
-    """Current user-facing state of a conversation."""
-
-    CHATTING = "chatting"
-    AWAITING_USER_EVALUATION = "awaiting_user_evaluation"
-
-
 @dataclass(frozen=True)
 class ConversationState:
     """Recent conversation context and its latest writing task."""
 
     conversation_id: str
     recent_messages: tuple[Message, ...] = ()
-    status: ConversationStatus = ConversationStatus.CHATTING
     active_task: WritingTask | None = None
 
     def __post_init__(self) -> None:
@@ -67,8 +59,6 @@ class ConversationState:
             isinstance(message, Message) for message in self.recent_messages
         ):
             raise ValueError("recent_messages must be a tuple of Message values")
-        if not isinstance(self.status, ConversationStatus):
-            raise ValueError("status must be a ConversationStatus")
         if self.active_task is not None:
             if not isinstance(self.active_task, WritingTask):
                 raise ValueError("active_task must be a WritingTask")

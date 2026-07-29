@@ -252,7 +252,7 @@ def test_existing_working_draft_reaches_writer_unchanged() -> None:
         id="task-1",
         conversation_id="conversation-1",
         brief=WritingBrief("Revise the current copy."),
-        status=WritingTaskStatus.AWAITING_USER_EVALUATION,
+        status=WritingTaskStatus.REVIEWED,
         created_at=NOW,
         updated_at=NOW,
         working_draft="Existing canonical copy",

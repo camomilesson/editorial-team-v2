@@ -1,9 +1,11 @@
 """Deterministic conversational application services."""
 
 from editorial_team.conversation.formatting import (
+    format_agent_message,
     format_critic_report,
-    format_working_draft,
-    request_user_evaluation,
+    format_editor_message,
+    format_talker_message,
+    format_writer_message,
 )
 from editorial_team.conversation.protocols import (
     ConversationStateStore,
@@ -22,7 +24,9 @@ __all__ = [
     "InMemoryConversationStateStore",
     "Talker",
     "WritingWorkflowRunner",
+    "format_agent_message",
     "format_critic_report",
-    "format_working_draft",
-    "request_user_evaluation",
+    "format_editor_message",
+    "format_talker_message",
+    "format_writer_message",
 ]

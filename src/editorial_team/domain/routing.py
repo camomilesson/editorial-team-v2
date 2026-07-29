@@ -14,7 +14,6 @@ class CoordinatorRoute(StrEnum):
 
     CHAT = "chat"
     START_WRITING_TASK = "start_writing_task"
-    APPROVE_TASK = "approve_task"
     REVISE_TASK = "revise_task"
 
 
@@ -62,4 +61,4 @@ class CoordinatorDecision:
             if self.task_input is not None:
                 raise ValueError("revise_task must not contain task_input")
         elif self.task_input is not None or self.revision_instructions is not None:
-            raise ValueError("chat and approve_task must not contain writing payloads")
+            raise ValueError("chat must not contain writing payloads")

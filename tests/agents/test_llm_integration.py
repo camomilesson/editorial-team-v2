@@ -15,7 +15,7 @@ from editorial_team.agents.schemas import (
     CRITIC_STRUCTURED_OUTPUT,
 )
 from editorial_team.conversation import ConversationService, InMemoryConversationStateStore
-from editorial_team.domain.conversation import ConversationState, ConversationStatus
+from editorial_team.domain.conversation import ConversationState
 from editorial_team.domain.editorial import (
     CriticReport,
     CriticVerdict,
@@ -136,7 +136,7 @@ def awaiting_store() -> InMemoryConversationStateStore:
         id="task-1",
         conversation_id="conversation-1",
         brief=WritingBrief("Original request", ("Keep it concise.",)),
-        status=WritingTaskStatus.AWAITING_USER_EVALUATION,
+        status=WritingTaskStatus.REVIEWED,
         created_at=NOW,
         updated_at=NOW,
         working_draft="Existing working draft",
@@ -145,7 +145,6 @@ def awaiting_store() -> InMemoryConversationStateStore:
     store.save(
         ConversationState(
             "conversation-1",
-            status=ConversationStatus.AWAITING_USER_EVALUATION,
             active_task=active_task,
         )
     )
@@ -160,7 +159,9 @@ def test_chat_route_completes_with_real_model_backed_agents() -> None:
 
     messages = service.process_message("conversation-1", "Hello")
 
-    assert [message.content for message in messages] == ["Hello! How can I help?"]
+    assert [message.content for message in messages] == [
+        "Talker\n\nHello! How can I help?"
+    ]
     assert len(coordinator.requests) == len(talker.requests) == 1
     assert writer.requests == critic.requests == editor.requests == []
     assert len(store.load("conversation-1").recent_messages) == 2  # type: ignore[union-attr]
@@ -177,9 +178,11 @@ def test_start_writing_pass_completes_with_expected_order() -> None:
 
     messages = service.process_message("conversation-1", "Write a launch post")
 
-    assert messages[0].content == "Writer output:\nWriter output"
-    assert messages[1].content.startswith("Critic verdict: PASS")
-    assert messages[2].content == "The Writer output is now the working draft."
+    assert [message.content for message in messages] == [
+        "Writer\n\nWriter output",
+        "Critic\n\nVerdict: PASS\n\nSummary: Review complete.\n\nIssues: None",
+        "Editor\n\nWorking draft approved, see above.",
+    ]
     assert len(writer.requests) == len(critic.requests) == 1
     assert editor.requests == []
     state = store.load("conversation-1")
@@ -217,9 +220,9 @@ def test_start_writing_revise_completes_optional_editor_pass() -> None:
 
     messages = service.process_message("conversation-1", "Write a launch post")
 
-    assert messages[0].content == "Writer output:\nWriter output"
-    assert messages[1].content.startswith("Critic verdict: REVISE")
-    assert messages[2].content == "Revised working draft:\nEditor output"
+    assert messages[0].content == "Writer\n\nWriter output"
+    assert messages[1].content.startswith("Critic\n\nVerdict: REVISE")
+    assert messages[2].content == "Editor\n\nEditor output"
     assert len(writer.requests) == len(critic.requests) == len(editor.requests) == 1
     state = store.load("conversation-1")
     assert state is not None
@@ -227,23 +230,24 @@ def test_start_writing_revise_completes_optional_editor_pass() -> None:
     assert state.active_task.working_draft == "Editor output"
 
 
-def test_approval_completes_without_writing_agents() -> None:
+def test_praise_routes_to_talker_and_preserves_latest_task() -> None:
     service, store, _, talker, writer, critic, editor = build_service(
-        coordinator_responses=[decision("approve_task")],
-        talker_responses=[response("Great, it is approved.")],
+        coordinator_responses=[decision("chat")],
+        talker_responses=[response("Thanks! Let me know what you want to work on next.")],
         store=awaiting_store(),
     )
 
     messages = service.process_message("conversation-1", "Looks great")
 
-    assert [message.content for message in messages] == ["Great, it is approved."]
+    assert [message.content for message in messages] == [
+        "Talker\n\nThanks! Let me know what you want to work on next."
+    ]
     assert len(talker.requests) == 1
     assert writer.requests == critic.requests == editor.requests == []
     state = store.load("conversation-1")
     assert state is not None
-    assert state.status is ConversationStatus.CHATTING
     assert state.active_task is not None
-    assert state.active_task.status is WritingTaskStatus.APPROVED
+    assert state.active_task.status is WritingTaskStatus.REVIEWED
 
 
 def test_revision_reruns_normal_writing_workflow() -> None:
@@ -258,7 +262,7 @@ def test_revision_reruns_normal_writing_workflow() -> None:
 
     messages = service.process_message("conversation-1", "Make it shorter")
 
-    assert messages[0].content == "Writer output:\nWriter output"
+    assert messages[0].content == "Writer\n\nWriter output"
     assert len(writer.requests) == len(critic.requests) == 1
     assert editor.requests == []
     writer_prompt = writer.requests[0].input
@@ -270,3 +274,59 @@ def test_revision_reruns_normal_writing_workflow() -> None:
     assert state.active_task is not None
     assert state.active_task.id == "task-1"
     assert state.active_task.working_draft == "Writer output"
+
+
+def test_latest_task_survives_chat_then_revision_and_is_replaced_by_new_task() -> None:
+    service, store, _, talker, writer, critic, editor = build_service(
+        coordinator_responses=[
+            decision("start_writing_task", task_input="Write the first post."),
+            decision("chat"),
+            decision("chat"),
+            decision("revise_task", revision_instructions="Make it shorter."),
+            decision("start_writing_task", task_input="Write a new announcement."),
+        ],
+        talker_responses=[
+            response("Thanks!"),
+            response("What would you like to change?"),
+        ],
+        writer_responses=[
+            response("First draft"),
+            response("Shorter draft"),
+            response("New task draft"),
+        ],
+        critic_responses=[report("pass"), report("pass"), report("pass")],
+    )
+
+    first_messages = service.process_message("conversation-1", "Write the first post")
+    first_state = store.load("conversation-1")
+    assert first_state is not None and first_state.active_task is not None
+    first_task_id = first_state.active_task.id
+    assert len(first_messages) == 3
+
+    praise = service.process_message("conversation-1", "Awesome")
+    uncertain = service.process_message("conversation-1", "I’m not sure about it")
+    after_chat = store.load("conversation-1")
+    assert [message.content for message in (*praise, *uncertain)] == [
+        "Talker\n\nThanks!",
+        "Talker\n\nWhat would you like to change?",
+    ]
+    assert after_chat is not None and after_chat.active_task is not None
+    assert after_chat.active_task.id == first_task_id
+
+    revision = service.process_message("conversation-1", "Actually, make it shorter")
+    revised_state = store.load("conversation-1")
+    assert len(revision) == 3
+    assert revised_state is not None and revised_state.active_task is not None
+    assert revised_state.active_task.id == first_task_id
+    assert revised_state.active_task.brief.instructions == ("Make it shorter.",)
+    assert revised_state.active_task.working_draft == "Shorter draft"
+
+    new_task = service.process_message("conversation-1", "Write a new announcement")
+    final_state = store.load("conversation-1")
+    assert len(new_task) == 3
+    assert final_state is not None and final_state.active_task is not None
+    assert final_state.active_task.id != first_task_id
+    assert final_state.active_task.brief.original_request == "Write a new announcement."
+    assert len(talker.requests) == 2
+    assert len(writer.requests) == len(critic.requests) == 3
+    assert editor.requests == []

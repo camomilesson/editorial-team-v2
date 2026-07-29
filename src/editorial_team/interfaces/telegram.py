@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
+import math
+from collections.abc import Awaitable, Callable, Sequence
 
 from telegram import Update
-from telegram.constants import ChatType
+from telegram.constants import ChatAction, ChatType
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -28,9 +29,13 @@ from editorial_team.tracing import (
 
 MAX_TELEGRAM_TEXT_LENGTH = 4096
 ONBOARDING_MESSAGE = (
-    "Hi — just message me normally. I can chat with you or help draft and revise text."
+    "Talker\n\nHi — welcome to Editorial Team. We can discuss, draft, review, "
+    "revise, translate, or proofread text together."
 )
 GENERIC_TURN_ERROR = "Sorry — I couldn’t complete that turn. Please try again."
+DEFAULT_HANDOFF_DELAY_SECONDS = 1.25
+AsyncSleeper = Callable[[float], Awaitable[None]]
+
 
 def conversation_id_for_chat(chat_id: int) -> str:
     """Convert a Telegram chat identifier into a stable opaque identifier."""
@@ -84,8 +89,25 @@ def _preferred_split(text: str, limit: int) -> int:
 class TelegramAdapter:
     """Translate private Telegram text updates to conversation turns."""
 
-    def __init__(self, service: ConversationService) -> None:
+    def __init__(
+        self,
+        service: ConversationService,
+        *,
+        handoff_delay: float = DEFAULT_HANDOFF_DELAY_SECONDS,
+        sleeper: AsyncSleeper = asyncio.sleep,
+    ) -> None:
+        if (
+            isinstance(handoff_delay, bool)
+            or not isinstance(handoff_delay, (int, float))
+            or not math.isfinite(handoff_delay)
+            or handoff_delay < 0
+        ):
+            raise ValueError("handoff_delay must be a non-negative number")
+        if not callable(sleeper):
+            raise ValueError("sleeper must be callable")
         self._service = service
+        self._handoff_delay = float(handoff_delay)
+        self._sleeper = sleeper
         self._turn_lock = asyncio.Lock()
 
     async def start(
@@ -167,15 +189,21 @@ class TelegramAdapter:
                 set_trace_stage("telegram")
                 trace_event("telegram_turn_completed", stage="telegram", outcome="completed")
 
-    @staticmethod
     async def _send_messages(
+        self,
         *,
         chat_id: int,
         messages: Sequence[Message],
         context: ContextTypes.DEFAULT_TYPE,
     ) -> int:
         chunk_count = 0
-        for message in messages:
+        for index, message in enumerate(messages):
+            if index:
+                await context.bot.send_chat_action(
+                    chat_id=chat_id,
+                    action=ChatAction.TYPING,
+                )
+                await self._sleeper(self._handoff_delay)
             for chunk in chunk_text(message.content):
                 await context.bot.send_message(chat_id=chat_id, text=chunk)
                 chunk_count += 1

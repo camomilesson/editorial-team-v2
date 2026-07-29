@@ -48,7 +48,6 @@ def make_task(
     *,
     working_draft: object = None,
     critic_report: CriticReport | None = None,
-    user_evaluation: str | None = None,
 ) -> WritingTask:
     return WritingTask(
         id="task-1",
@@ -59,7 +58,6 @@ def make_task(
         updated_at=NOW,
         working_draft=working_draft,  # type: ignore[arg-type]
         critic_report=critic_report,
-        user_evaluation=user_evaluation,
     )
 
 
@@ -80,10 +78,9 @@ def test_constructs_every_editorial_model() -> None:
         id="task-1",
         conversation_id="conversation-1",
         brief=brief,
-        status=WritingTaskStatus.AWAITING_USER_EVALUATION,
+        status=WritingTaskStatus.REVIEWED,
         working_draft="Canonical copy",
         critic_report=report,
-        user_evaluation="Please make the title shorter.",
         created_at=NOW,
         updated_at=NOW,
     )
@@ -96,8 +93,6 @@ def test_constructs_every_editorial_model() -> None:
         "drafted",
         "reviewed",
         "revised",
-        "awaiting_user_evaluation",
-        "approved",
     }
 
 
@@ -111,7 +106,6 @@ def test_writing_task_has_only_one_draft_field() -> None:
         "updated_at",
         "working_draft",
         "critic_report",
-        "user_evaluation",
     }
 
 
@@ -133,8 +127,6 @@ def test_present_working_draft_must_be_nonblank_text() -> None:
         WritingTaskStatus.DRAFTED,
         WritingTaskStatus.REVIEWED,
         WritingTaskStatus.REVISED,
-        WritingTaskStatus.AWAITING_USER_EVALUATION,
-        WritingTaskStatus.APPROVED,
     ],
 )
 def test_produced_text_statuses_require_working_draft(status: WritingTaskStatus) -> None:
@@ -147,31 +139,11 @@ def test_produced_text_statuses_require_working_draft(status: WritingTaskStatus)
     [
         WritingTaskStatus.REVIEWED,
         WritingTaskStatus.REVISED,
-        WritingTaskStatus.AWAITING_USER_EVALUATION,
-        WritingTaskStatus.APPROVED,
     ],
 )
 def test_reviewed_statuses_require_critic_report(status: WritingTaskStatus) -> None:
     with pytest.raises(ValueError, match="critic_report"):
         make_task(status, working_draft="Copy")
-
-
-def test_approved_task_requires_evaluation_and_canonical_draft() -> None:
-    with pytest.raises(ValueError, match="user_evaluation"):
-        make_task(
-            WritingTaskStatus.APPROVED,
-            working_draft="Approved copy",
-            critic_report=passing_report(),
-        )
-
-    task = make_task(
-        WritingTaskStatus.APPROVED,
-        working_draft="Approved copy",
-        critic_report=passing_report(),
-        user_evaluation="I approve this.",
-    )
-    assert task.working_draft == "Approved copy"
-    assert task.user_evaluation == "I approve this."
 
 
 @pytest.mark.parametrize(
@@ -230,8 +202,6 @@ def test_writing_task_validates_identifiers_timestamps_and_optional_text() -> No
             NOW,
             NOW - timedelta(seconds=1),
         )
-    with pytest.raises(ValueError, match="user_evaluation"):
-        WritingTask("task-1", "conversation-1", user_evaluation=" ", **common)
 
 
 def test_passing_report_must_not_contain_major_issues() -> None:

@@ -2,7 +2,6 @@
 
 from editorial_team.domain.conversation import (
     ConversationState,
-    ConversationStatus,
     Message,
     MessageRole,
 )
@@ -20,7 +19,6 @@ from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
 
 __all__ = [
     "ConversationState",
-    "ConversationStatus",
     "CoordinatorDecision",
     "CoordinatorRoute",
     "CriticIssue",

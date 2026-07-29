@@ -35,18 +35,24 @@ tasks. Until the later event-queue milestone, Telegram turns are deliberately se
 with one in-flight turn at a time. This causes head-of-line blocking when a model call is
 slow; it is not the final queue design.
 
+The Coordinator routes messages to `CHAT`, `START_WRITING_TASK`, or `REVISE_TASK`.
+There is no explicit approval phase: the latest completed writing task remains available
+for later revision, including after intervening chat, until a new writing request replaces
+it. Writer, Critic, and Editor are displayed as a staged Telegram handoff after the complete
+Writer–Critic–optional Editor workflow has finished atomically. This presentation delay is
+not real-time workflow streaming.
+
 ### Manual smoke test
 
 1. Start the bot locally with the command above.
 2. Open the disposable bot in Telegram.
 3. Send `Hello!` and expect one normal conversational response.
 4. Send `Write a short LinkedIn post announcing that Editorial Team is now available as a
-   Telegram bot.` Expect Writer output, a Critic evaluation, either a pass confirmation or
-   Editor revision, and a request for evaluation.
+   Telegram bot.` Expect Writer output, a Critic evaluation, and an Editor handoff message.
 5. Send `Make it shorter and less formal.` Expect another normal
-   Writer–Critic–optional Editor cycle using the current working draft, followed by a new
-   evaluation request.
-6. Send `Looks good, thanks.` Expect approval and a conversational acknowledgement.
+   Writer–Critic–optional Editor cycle using the current working draft.
+6. Send `Looks good, thanks.` Expect a conversational acknowledgement while the latest task
+   remains available for revision.
 7. Stop and restart the process. The prior state should be gone because storage is
    intentionally in memory.
 

@@ -77,11 +77,15 @@ class Bot:
     def __init__(self, *, fail: bool = False) -> None:
         self.fail = fail
         self.sent: list[dict[str, object]] = []
+        self.actions: list[dict[str, object]] = []
 
     async def send_message(self, **kwargs: object) -> None:
         if self.fail:
             raise RuntimeError("DELIVERY-RAW-SECRET")
         self.sent.append(kwargs)
+
+    async def send_chat_action(self, **kwargs: object) -> None:
+        self.actions.append(kwargs)
 
 
 def update(update_id: int, text: str = "USER-CONTENT-SECRET") -> SimpleNamespace:
@@ -122,7 +126,7 @@ def run_turn(
     bot: Bot | None = None,
 ) -> Bot:
     telegram_bot = bot or Bot()
-    adapter = TelegramAdapter(application_service)
+    adapter = TelegramAdapter(application_service, handoff_delay=0)
     context = SimpleNamespace(bot=telegram_bot)
     asyncio.run(adapter.handle_text(update(update_id), context))
     return telegram_bot
@@ -331,6 +335,8 @@ def test_successful_writing_logs_granular_stages_and_safe_result_metadata(
         assert event in trace
     assert "critic_verdict=revise" in trace
     assert "revision_applied=true" in trace
+    assert "assistant_message_count=3" in trace
+    assert "chunk_count=3" in trace
     for forbidden in (
         "TASK-INPUT-SECRET",
         "WRITER-OUTPUT-SECRET",
@@ -392,7 +398,7 @@ def test_separate_turns_have_distinct_consistent_correlations(
         coordinator=CoordinatorDecision(CoordinatorRoute.CHAT, 1.0),
         talker="Safe reply",
     )
-    adapter = TelegramAdapter(app)
+    adapter = TelegramAdapter(app, handoff_delay=0)
     context = SimpleNamespace(bot=Bot())
 
     asyncio.run(adapter.handle_text(update(201), context))
