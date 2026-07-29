@@ -18,26 +18,32 @@ pytest
 Use `.env.example` as a configuration reference and provide `GEMINI_API_KEY` through
 the process environment to use the Gemini adapter.
 
-## Local Telegram bot
+## Combined live application
 
-The live adapter supports private Telegram chats using long polling. Group chats and
-non-text updates are deliberately ignored in this first slice.
+The recommended class-demo runtime starts Telegram long polling, the external brief HTTP
+API, and the optional heartbeat in one process over exactly one shared `RuntimeQueue`.
+Heartbeat therefore observes both `TELEGRAM` and `EXTERNAL` activity.
 
-Provide `GEMINI_API_KEY`, `AGENT_MODEL`, and `TELEGRAM_BOT_TOKEN` through the process
-environment supplied by your shell or editor. The application does not load `.env` files.
+Provide `GEMINI_API_KEY`, `AGENT_MODEL`, `TELEGRAM_BOT_TOKEN`, and a non-empty
+`EDITORIAL_EXTERNAL_API_TOKEN` through the process environment supplied by your shell,
+editor, or the real ignored `.env`. `.env.example` intentionally leaves credentials blank;
+missing or blank required configuration stops startup safely. The application does not
+load `.env` files itself.
 
 ```shell
-python scripts/run_telegram_bot.py
+python scripts/run_live_application.py
 ```
 
 Conversation state is in memory: restarting the process loses conversations and active
 tasks.
 
-## External brief API
+## Standalone external brief API
 
 The external brief server exposes one synchronous authenticated endpoint that sends a
-standalone writing brief through the same Writer–Critic–Editor workflow and shared runtime
-queue used by the application. It does not start Telegram polling or the heartbeat scheduler.
+standalone writing brief through the Writer–Critic–Editor workflow. This focused
+development/testing command runs in a separate process with its own process-local queue and
+metrics. It does not start Telegram polling or heartbeat, so Telegram heartbeat cannot
+observe its `EXTERNAL` activity.
 
 Provide `GEMINI_API_KEY`, `AGENT_MODEL`, and a non-empty
 `EDITORIAL_EXTERNAL_API_TOKEN` through the process environment. The server defaults to
@@ -64,7 +70,8 @@ A successful response contains only the completed editorial result:
 {"status":"completed","result":"The completed editorial copy."}
 ```
 
-Authentication is checked before validation or queue submission. Accepted first-time jobs
+For `POST /brief`, authentication is checked before request framing, body reading,
+validation, or queue submission. Accepted first-time jobs
 use runtime source `EXTERNAL`, preserving the queue's FIFO and one-in-flight behavior.
 Idempotency state is process-local and protected across concurrent requests: repeating the
 same key and brief shares or returns the original response without another job, while using

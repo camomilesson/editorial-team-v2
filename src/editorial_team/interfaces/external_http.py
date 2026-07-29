@@ -39,7 +39,7 @@ class HttpResponse:
     """Transport-ready JSON response."""
 
     status_code: int
-    body: dict[str, str]
+    body: Mapping[str, str]
 
 
 @dataclass
@@ -50,6 +50,10 @@ class _IdempotencyEntry:
 
 def _error(status_code: int, code: str, message: str) -> HttpResponse:
     return HttpResponse(status_code, {"error": code, "message": message})
+
+
+def _copy_response(response: HttpResponse) -> HttpResponse:
+    return HttpResponse(response.status_code, dict(response.body))
 
 
 class ExternalBriefHttpAdapter:
@@ -76,6 +80,14 @@ class ExternalBriefHttpAdapter:
 
         self._accepting = False
 
+    def is_authorized(self, authorization: str | None) -> bool:
+        """Validate one bearer credential without retaining or tracing it."""
+
+        if not isinstance(authorization, str) or not authorization.startswith("Bearer "):
+            return False
+        supplied = authorization[7:]
+        return bool(supplied) and hmac.compare_digest(supplied, self._token)
+
     async def handle(
         self,
         *,
@@ -86,14 +98,40 @@ class ExternalBriefHttpAdapter:
 
         correlation_id = f"ext-{uuid4().hex[:12]}"
         trace_runtime_event("external_request_received", correlation_id=correlation_id)
-        if not self._authorized(headers.get("Authorization")):
+        if not self.is_authorized(headers.get("Authorization")):
             trace_runtime_event(
                 "external_authentication_rejected",
                 correlation_id=correlation_id,
                 outcome="rejected",
             )
             return _error(401, "unauthorized", "Authentication is required")
+        return await self.handle_authenticated(
+            headers=headers,
+            body=body,
+            _correlation_id=correlation_id,
+        )
+
+    async def handle_authenticated(
+        self,
+        *,
+        headers: Mapping[str, str],
+        body: bytes,
+        _correlation_id: str | None = None,
+    ) -> HttpResponse:
+        """Handle input whose authorization was validated by the transport."""
+
+        correlation_id = _correlation_id or f"ext-{uuid4().hex[:12]}"
+        if _correlation_id is None:
+            trace_runtime_event(
+                "external_request_received",
+                correlation_id=correlation_id,
+            )
         if not self._accepting:
+            trace_runtime_event(
+                "external_shutdown_rejected",
+                correlation_id=correlation_id,
+                outcome="rejected",
+            )
             return _error(503, "service_unavailable", "Service is unavailable")
 
         content_type = headers.get("Content-Type", "")
@@ -160,23 +198,35 @@ class ExternalBriefHttpAdapter:
                 execution = entry.execution
             else:
                 execution = asyncio.create_task(
-                    self._submit(brief=brief, correlation_id=correlation_id)
+                    self._execute_and_cleanup(
+                        key=key,
+                        brief=brief,
+                        correlation_id=correlation_id,
+                    )
                 )
                 entry = _IdempotencyEntry(fingerprint, execution)
                 self._entries[key] = entry
 
         response = await asyncio.shield(execution)
+        return _copy_response(response)
+
+    async def _execute_and_cleanup(
+        self,
+        *,
+        key: str,
+        brief: str,
+        correlation_id: str,
+    ) -> HttpResponse:
+        """Execute shared work and own cleanup of retryable results."""
+
+        response = await self._submit(brief=brief, correlation_id=correlation_id)
         if response.status_code == 503:
+            current = asyncio.current_task()
             async with self._lock:
-                if self._entries.get(key) is entry:
+                entry = self._entries.get(key)
+                if entry is not None and entry.execution is current:
                     self._entries.pop(key)
         return response
-
-    def _authorized(self, authorization: str | None) -> bool:
-        if not isinstance(authorization, str) or not authorization.startswith("Bearer "):
-            return False
-        supplied = authorization[7:]
-        return bool(supplied) and hmac.compare_digest(supplied, self._token)
 
     def _validation_error(
         self,
@@ -235,7 +285,7 @@ class ExternalBriefHttpAdapter:
 class ExternalBriefHttpServer(ThreadingHTTPServer):
     """Standard-library HTTP server bound to the application's asyncio loop."""
 
-    daemon_threads = True
+    daemon_threads = False
 
     def __init__(
         self,
@@ -256,20 +306,32 @@ class ExternalBriefRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path != "/brief":
+            self._trace_transport_rejection("unsupported_route")
             self._send(_error(404, "not_found", "Endpoint not found"))
+            return
+        if not self.server.adapter.is_authorized(self.headers.get("Authorization")):
+            self._trace_transport_rejection("authentication_rejected")
+            self._send(_error(401, "unauthorized", "Authentication is required"))
             return
         raw_length = self.headers.get("Content-Length", "")
         try:
             length = int(raw_length)
         except ValueError:
+            self._trace_transport_rejection("invalid_content_length")
             self._send(_error(400, "invalid_request", "Request body is invalid"))
             return
         if length < 0 or length > MAX_REQUEST_BODY_BYTES:
+            category = (
+                "request_body_too_large"
+                if length > MAX_REQUEST_BODY_BYTES
+                else "invalid_content_length"
+            )
+            self._trace_transport_rejection(category)
             self._send(_error(400, "invalid_request", "Request body is invalid"))
             return
         body = self.rfile.read(length)
         future = asyncio.run_coroutine_threadsafe(
-            self.server.adapter.handle(headers=self.headers, body=body),
+            self.server.adapter.handle_authenticated(headers=self.headers, body=body),
             self.server.loop,
         )
         try:
@@ -277,6 +339,18 @@ class ExternalBriefRequestHandler(BaseHTTPRequestHandler):
         except Exception:
             response = _error(500, "internal_error", "Request could not be completed")
         self._send(response)
+
+    def do_GET(self) -> None:  # noqa: N802
+        self._trace_transport_rejection("unsupported_method")
+        self._send(_error(404, "not_found", "Endpoint not found"))
+
+    def _trace_transport_rejection(self, category: str) -> None:
+        trace_runtime_event(
+            "external_transport_rejected",
+            correlation_id=f"ext-{uuid4().hex[:12]}",
+            outcome="rejected",
+            error_category=category,
+        )
 
     def _send(self, response: HttpResponse) -> None:
         encoded = json.dumps(response.body, separators=(",", ":")).encode()

@@ -5,6 +5,7 @@ import json
 import logging
 import threading
 from dataclasses import dataclass
+from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
@@ -13,6 +14,7 @@ from editorial_team.interfaces.external_http import (
     MAX_BRIEF_LENGTH,
     MAX_IDEMPOTENCY_KEY_LENGTH,
     ExternalBriefHttpAdapter,
+    ExternalBriefRequestHandler,
 )
 from editorial_team.runtime import (
     QueueCapacityError,
@@ -233,6 +235,90 @@ def test_queue_rejection_returns_503_and_can_be_retried() -> None:
     assert len(queue.submissions) == 2
 
 
+def test_retryable_cleanup_survives_all_waiter_cancellation() -> None:
+    class BlockingRejectingQueue(ImmediateQueue):
+        def __init__(self) -> None:
+            super().__init__()
+            self.entered = asyncio.Event()
+            self.release = asyncio.Event()
+
+        async def submit(self, **kwargs: object) -> object:
+            self.submissions.append(kwargs)
+            self.entered.set()
+            await self.release.wait()
+            raise QueueCapacityError("private queue detail")
+
+    async def scenario() -> tuple[int, int]:
+        queue = BlockingRejectingQueue()
+        application, _, _ = adapter(queue=queue)
+        first = asyncio.create_task(application.handle(headers=headers(), body=body()))
+        second = asyncio.create_task(application.handle(headers=headers(), body=body()))
+        await queue.entered.wait()
+        first.cancel()
+        second.cancel()
+        await asyncio.gather(first, second, return_exceptions=True)
+        queue.release.set()
+        while application._entries:
+            await asyncio.sleep(0)
+        retry = await application.handle(headers=headers(), body=body())
+        return retry.status_code, len(queue.submissions)
+
+    status, submissions = asyncio.run(scenario())
+
+    assert status == 503
+    assert submissions == 2
+
+
+def test_cancelled_waiter_does_not_remove_successful_cached_result() -> None:
+    class BlockingQueue(ImmediateQueue):
+        def __init__(self) -> None:
+            super().__init__()
+            self.entered = asyncio.Event()
+            self.release = asyncio.Event()
+
+        async def submit(self, **kwargs: object) -> object:
+            self.submissions.append(kwargs)
+            self.entered.set()
+            await self.release.wait()
+            operation = kwargs["operation"]
+            return await operation()  # type: ignore[operator]
+
+    async def scenario() -> tuple[object, object, int]:
+        queue = BlockingQueue()
+        application, _, _ = adapter(queue=queue)
+        cancelled = asyncio.create_task(
+            application.handle(headers=headers(), body=body())
+        )
+        await queue.entered.wait()
+        survivor = asyncio.create_task(
+            application.handle(headers=headers(), body=body())
+        )
+        cancelled.cancel()
+        await asyncio.gather(cancelled, return_exceptions=True)
+        queue.release.set()
+        completed = await survivor
+        cached = await application.handle(headers=headers(), body=body())
+        return completed, cached, len(queue.submissions)
+
+    completed, cached, submissions = asyncio.run(scenario())
+
+    assert completed == cached
+    assert submissions == 1
+
+
+def test_caller_mutation_does_not_change_cached_response() -> None:
+    async def scenario() -> object:
+        application, _, _ = adapter()
+        first = await application.handle(headers=headers(), body=body())
+        assert isinstance(first.body, dict)
+        first.body["result"] = "caller mutation"
+        return await application.handle(headers=headers(), body=body())
+
+    cached = asyncio.run(scenario())
+
+    assert cached.body["result"] == "Finished copy"
+
+
 def test_accepted_failure_is_cached_and_counted_once() -> None:
     class FailingService(RecordingService):
         def process_brief(self, brief: str) -> object:
@@ -299,6 +385,88 @@ def test_shutdown_rejects_without_queue_submission() -> None:
     assert response.status_code == 503
     assert service.calls == []
     assert queue.submissions == []
+
+
+def test_shutdown_rejection_is_traced_safely(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="editorial_team.live_trace")
+    application, _, _ = adapter()
+    application.stop_accepting()
+
+    asyncio.run(application.handle(headers=headers(), body=body("PRIVATE-BRIEF")))
+
+    assert "external_shutdown_rejected" in caplog.text
+    assert TOKEN not in caplog.text
+    assert "PRIVATE-BRIEF" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "authorization",
+    [None, "Bearer incorrect-token"],
+)
+def test_transport_authentication_rejects_before_reading_body(
+    authorization: str | None,
+) -> None:
+    application, _, queue = adapter()
+    request = ExternalBriefRequestHandler.__new__(ExternalBriefRequestHandler)
+    request.path = "/brief"
+    request.headers = {"Content-Length": "PRIVATE-MALFORMED"}
+    if authorization is not None:
+        request.headers["Authorization"] = authorization
+    request.rfile = SimpleNamespace(
+        read=lambda _: (_ for _ in ()).throw(AssertionError("body was read"))
+    )
+    responses: list[object] = []
+    request._send = responses.append
+    request.server = SimpleNamespace(adapter=application)
+
+    request.do_POST()
+
+    assert responses[0].status_code == 401
+    assert queue.submissions == []
+
+
+def test_transport_valid_authentication_precedes_framing_validation() -> None:
+    application, _, _ = adapter()
+    request = ExternalBriefRequestHandler.__new__(ExternalBriefRequestHandler)
+    request.path = "/brief"
+    request.headers = {
+        "Authorization": f"Bearer {TOKEN}",
+        "Content-Length": "PRIVATE-MALFORMED",
+    }
+    request.rfile = BytesIO(body())
+    responses: list[object] = []
+    request._send = responses.append
+    request.server = SimpleNamespace(adapter=application)
+
+    request.do_POST()
+
+    assert responses[0].status_code == 400
+    assert request.rfile.tell() == 0
+
+
+def test_transport_rejection_trace_excludes_credentials_and_framing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="editorial_team.live_trace")
+    application, _, _ = adapter()
+    request = ExternalBriefRequestHandler.__new__(ExternalBriefRequestHandler)
+    request.path = "/brief"
+    request.headers = {
+        "Authorization": "Bearer PRIVATE-WRONG-TOKEN",
+        "Content-Length": "PRIVATE-FRAMING",
+    }
+    request.rfile = BytesIO(b"PRIVATE-BODY")
+    request._send = lambda response: None
+    request.server = SimpleNamespace(adapter=application)
+
+    request.do_POST()
+
+    assert "external_transport_rejected" in caplog.text
+    assert "error_category=authentication_rejected" in caplog.text
+    for forbidden in ("PRIVATE-WRONG-TOKEN", "PRIVATE-FRAMING", "PRIVATE-BODY"):
+        assert forbidden not in caplog.text
 
 
 def test_traces_exclude_brief_token_result_and_raw_failure(

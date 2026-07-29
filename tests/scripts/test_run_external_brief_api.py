@@ -65,11 +65,51 @@ def test_import_starts_no_runtime_and_serve_closes_all_lifecycle_components(
     asyncio.run(_SCRIPT.serve())
 
     assert events == [
-        "queue-start",
         "server-created",
+        "queue-start",
         "serve",
         "stop-accepting",
         "shutdown",
         "server-close",
         "queue-close",
     ]
+
+
+def test_server_construction_failure_starts_no_queue_and_is_sanitized(
+    monkeypatch,
+) -> None:
+    events: list[str] = []
+
+    class Queue:
+        async def start(self) -> None:
+            events.append("queue-start")
+
+    application = SimpleNamespace(runtime_queue=Queue(), adapter=object())
+    configuration = SimpleNamespace(
+        token="placeholder-token",
+        host="127.0.0.1",
+        port=8080,
+    )
+    monkeypatch.setattr(
+        _SCRIPT, "load_external_api_configuration", lambda: configuration
+    )
+    monkeypatch.setattr(
+        _SCRIPT, "build_external_api_application", lambda token: application
+    )
+    monkeypatch.setattr(
+        _SCRIPT,
+        "ExternalBriefHttpServer",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            OSError("PRIVATE-PATH-AND-ENVIRONMENT")
+        ),
+    )
+
+    try:
+        asyncio.run(_SCRIPT.serve())
+    except _SCRIPT.LiveConfigurationError as exc:
+        assert str(exc) == "External HTTP server configuration is invalid"
+        assert exc.__cause__ is None
+    else:
+        raise AssertionError("Expected sanitized startup failure")
+
+    assert events == []

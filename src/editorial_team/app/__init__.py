@@ -2,10 +2,13 @@
 
 from editorial_team.app.composition import (
     RECENT_MESSAGE_LIMIT,
+    CombinedLiveApplication,
+    CombinedRuntimeLifecycle,
     ExternalApiApplication,
     HeartbeatComponents,
     LiveApplication,
     LiveConfigurationError,
+    build_combined_live_application_from_env,
     build_conversation_service,
     build_external_api_application,
     build_live_application_from_env,
@@ -28,6 +31,8 @@ from editorial_team.app.heartbeat_config import (
 
 __all__ = [
     "RECENT_MESSAGE_LIMIT",
+    "CombinedLiveApplication",
+    "CombinedRuntimeLifecycle",
     "DEFAULT_EXTERNAL_API_HOST",
     "DEFAULT_EXTERNAL_API_PORT",
     "DEFAULT_HEARTBEAT_DB_PATH",
@@ -42,6 +47,7 @@ __all__ = [
     "LiveApplication",
     "LiveConfigurationError",
     "build_conversation_service",
+    "build_combined_live_application_from_env",
     "build_external_api_application",
     "build_live_application_from_env",
     "load_heartbeat_configuration",

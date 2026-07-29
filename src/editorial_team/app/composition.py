@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -17,6 +18,11 @@ from editorial_team.agents import (
     LlmTalker,
     LlmWriter,
 )
+from editorial_team.app.external_config import (
+    ExternalApiConfiguration,
+    ExternalApiConfigurationError,
+    load_external_api_configuration,
+)
 from editorial_team.app.heartbeat_config import (
     HeartbeatConfigurationError,
     load_heartbeat_configuration,
@@ -24,7 +30,10 @@ from editorial_team.app.heartbeat_config import (
 from editorial_team.conversation import ConversationService, InMemoryConversationStateStore
 from editorial_team.gemini import create_gemini_client_from_env
 from editorial_team.interfaces.admin import TelegramMaintainerNotifier
-from editorial_team.interfaces.external_http import ExternalBriefHttpAdapter
+from editorial_team.interfaces.external_http import (
+    ExternalBriefHttpAdapter,
+    ExternalBriefHttpServer,
+)
 from editorial_team.interfaces.telegram import TelegramAdapter, build_telegram_application
 from editorial_team.models import ModelClient
 from editorial_team.operations import (
@@ -36,6 +45,7 @@ from editorial_team.operations import (
     SQLiteHeartbeatResultStore,
 )
 from editorial_team.runtime import DEFAULT_RUNTIME_QUEUE_CAPACITY, RuntimeQueue
+from editorial_team.tracing import trace_runtime_event
 from editorial_team.workflows import WritingWorkflow
 
 RECENT_MESSAGE_LIMIT = 50
@@ -80,6 +90,81 @@ class ExternalApiApplication:
     adapter: ExternalBriefHttpAdapter
     runtime_queue: RuntimeQueue
     model_name: str
+
+
+@dataclass(frozen=True)
+class CombinedLiveApplication:
+    """Telegram, external HTTP, and heartbeat sharing one live dependency graph."""
+
+    live: LiveApplication
+    external_adapter: ExternalBriefHttpAdapter
+    external_configuration: ExternalApiConfiguration
+    lifecycle: CombinedRuntimeLifecycle
+
+    @property
+    def runtime_queue(self) -> RuntimeQueue:
+        """Expose the single shared queue for inspection."""
+
+        return self.live.runtime_queue
+
+
+class CombinedRuntimeLifecycle:
+    """Own the HTTP server around the existing Telegram runtime lifecycle."""
+
+    def __init__(
+        self,
+        *,
+        live: LiveApplication,
+        external_adapter: ExternalBriefHttpAdapter,
+        configuration: ExternalApiConfiguration,
+        server_factory: type[ExternalBriefHttpServer] = ExternalBriefHttpServer,
+    ) -> None:
+        self._live = live
+        self._external_adapter = external_adapter
+        self._configuration = configuration
+        self._server_factory = server_factory
+        self._server: ExternalBriefHttpServer | None = None
+        self._server_task: asyncio.Task[None] | None = None
+
+    async def start(self, application: Application) -> None:
+        """Bind HTTP, then start the one shared queue and heartbeat lifecycle."""
+
+        loop = asyncio.get_running_loop()
+        try:
+            server = self._server_factory(
+                (self._configuration.host, self._configuration.port),
+                adapter=self._external_adapter,
+                loop=loop,
+            )
+        except Exception:
+            raise LiveConfigurationError("External HTTP server configuration is invalid") from None
+        self._server = server
+        try:
+            await self._live.adapter.start_runtime(application)
+            self._server_task = asyncio.create_task(
+                asyncio.to_thread(server.serve_forever),
+                name="external-http-server",
+            )
+        except Exception:
+            await asyncio.to_thread(server.server_close)
+            await self._live.adapter.close_runtime(application)
+            raise LiveConfigurationError("Combined runtime could not start") from None
+        trace_runtime_event("combined_runtime_started", correlation_id="combined-runtime")
+        trace_runtime_event("external_server_started", correlation_id="external-server")
+
+    async def close(self, application: Application) -> None:
+        """Stop HTTP acceptance and server before closing heartbeat and queue."""
+
+        server = self._server
+        if server is not None:
+            self._external_adapter.stop_accepting()
+            await asyncio.to_thread(server.shutdown)
+            if self._server_task is not None:
+                await self._server_task
+            await asyncio.to_thread(server.server_close)
+            trace_runtime_event("external_server_stopped", correlation_id="external-server")
+        await self._live.adapter.close_runtime(application)
+        trace_runtime_event("combined_runtime_stopped", correlation_id="combined-runtime")
 
 
 def build_conversation_service(
@@ -202,4 +287,32 @@ def build_external_api_application(token: str) -> ExternalApiApplication:
         adapter=adapter,
         runtime_queue=runtime_queue,
         model_name=model.model,
+    )
+
+
+def build_combined_live_application_from_env() -> CombinedLiveApplication:
+    """Compose Telegram, HTTP, and heartbeat over one model, service, and queue."""
+
+    try:
+        configuration = load_external_api_configuration()
+    except ExternalApiConfigurationError:
+        raise LiveConfigurationError("Required external API configuration is missing") from None
+    live = build_live_application_from_env()
+    external_adapter = ExternalBriefHttpAdapter(
+        token=configuration.token,
+        service=live.service,
+        runtime_queue=live.runtime_queue,
+    )
+    lifecycle = CombinedRuntimeLifecycle(
+        live=live,
+        external_adapter=external_adapter,
+        configuration=configuration,
+    )
+    live.telegram.post_init = lifecycle.start
+    live.telegram.post_shutdown = lifecycle.close
+    return CombinedLiveApplication(
+        live=live,
+        external_adapter=external_adapter,
+        external_configuration=configuration,
+        lifecycle=lifecycle,
     )
