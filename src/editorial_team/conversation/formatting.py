@@ -14,13 +14,13 @@ def format_agent_message(agent: str, content: str) -> str:
 def format_talker_message(content: str) -> str:
     """Render one Talker response."""
 
-    return format_agent_message("Talker", content)
+    return format_agent_message("💬 Talker", content)
 
 
 def format_writer_message(content: str) -> str:
     """Render exact Writer output."""
 
-    return format_agent_message("Writer", content)
+    return format_agent_message("✍️ Writer", content)
 
 
 def format_critic_report(report: CriticReport) -> str:
@@ -32,7 +32,7 @@ def format_critic_report(report: CriticReport) -> str:
     ]
     if not report.issues:
         sections.append("Issues: None")
-        return format_agent_message("Critic", "\n\n".join(sections))
+        return format_agent_message("🔍 Critic", "\n\n".join(sections))
 
     issue_sections: list[str] = []
     for index, issue in enumerate(report.issues, start=1):
@@ -57,4 +57,4 @@ def format_editor_message(result: EditorialResult) -> str:
         if result.revision_applied
         else "Working draft approved, see above."
     )
-    return format_agent_message("Editor", content)
+    return format_agent_message("🛠️ Editor", content)
