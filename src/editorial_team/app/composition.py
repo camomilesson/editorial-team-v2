@@ -1,4 +1,4 @@
-"""Composition root for the local live Telegram product."""
+"""Composition root for live Editorial Team interfaces."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from editorial_team.app.heartbeat_config import (
 from editorial_team.conversation import ConversationService, InMemoryConversationStateStore
 from editorial_team.gemini import create_gemini_client_from_env
 from editorial_team.interfaces.admin import TelegramMaintainerNotifier
+from editorial_team.interfaces.external_http import ExternalBriefHttpAdapter
 from editorial_team.interfaces.telegram import TelegramAdapter, build_telegram_application
 from editorial_team.models import ModelClient
 from editorial_team.operations import (
@@ -68,6 +69,17 @@ class HeartbeatComponents:
     notifier: TelegramMaintainerNotifier
     runner: HeartbeatRunner
     scheduler: HeartbeatScheduler
+
+
+@dataclass(frozen=True)
+class ExternalApiApplication:
+    """Composed dependencies for the external brief server."""
+
+    service: ConversationService
+    store: InMemoryConversationStateStore
+    adapter: ExternalBriefHttpAdapter
+    runtime_queue: RuntimeQueue
+    model_name: str
 
 
 def build_conversation_service(
@@ -165,4 +177,29 @@ def build_live_application_from_env() -> LiveApplication:
         runtime_queue=runtime_queue,
         model_name=model.model,
         heartbeat=heartbeat,
+    )
+
+
+def build_external_api_application(token: str) -> ExternalApiApplication:
+    """Compose the external adapter around one shared model, service, and queue."""
+
+    if not isinstance(token, str) or not token.strip():
+        raise LiveConfigurationError("Required external API configuration is missing")
+    try:
+        model = create_gemini_client_from_env()
+    except Exception:
+        raise LiveConfigurationError("Required model configuration is missing or invalid") from None
+    service, store = build_conversation_service(model)
+    runtime_queue = RuntimeQueue(DEFAULT_RUNTIME_QUEUE_CAPACITY)
+    adapter = ExternalBriefHttpAdapter(
+        token=token,
+        service=service,
+        runtime_queue=runtime_queue,
+    )
+    return ExternalApiApplication(
+        service=service,
+        store=store,
+        adapter=adapter,
+        runtime_queue=runtime_queue,
+        model_name=model.model,
     )

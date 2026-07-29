@@ -6,8 +6,10 @@ from telegram.ext import Application
 from editorial_team.app import composition
 from editorial_team.app.composition import (
     RECENT_MESSAGE_LIMIT,
+    ExternalApiApplication,
     LiveConfigurationError,
     build_conversation_service,
+    build_external_api_application,
     build_live_application_from_env,
 )
 from editorial_team.conversation import ConversationService, InMemoryConversationStateStore
@@ -40,6 +42,25 @@ def test_build_conversation_service_wires_real_components_with_in_memory_store()
     assert service._workflow._writer._model is model
     assert service._workflow._critic._model is model
     assert service._workflow._editor._model is model
+
+
+def test_external_composition_reuses_one_service_model_and_queue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = NamedFakeModel([])
+    monkeypatch.setattr(composition, "create_gemini_client_from_env", lambda: model)
+
+    application = build_external_api_application("placeholder-token")
+
+    assert isinstance(application, ExternalApiApplication)
+    assert application.adapter._service is application.service
+    assert application.adapter._runtime_queue is application.runtime_queue
+    assert application.service._workflow._writer._model is model
+    assert application.service._workflow._critic._model is model
+    assert application.service._workflow._editor._model is model
+    assert application.runtime_queue.capacity == DEFAULT_RUNTIME_QUEUE_CAPACITY
+    assert application.model_name == model.model
+    assert application.runtime_queue.stats().worker_running is False
 
 
 def test_missing_telegram_token_fails_safely(

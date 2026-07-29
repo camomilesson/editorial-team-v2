@@ -33,6 +33,49 @@ python scripts/run_telegram_bot.py
 Conversation state is in memory: restarting the process loses conversations and active
 tasks.
 
+## External brief API
+
+The external brief server exposes one synchronous authenticated endpoint that sends a
+standalone writing brief through the same Writer–Critic–Editor workflow and shared runtime
+queue used by the application. It does not start Telegram polling or the heartbeat scheduler.
+
+Provide `GEMINI_API_KEY`, `AGENT_MODEL`, and a non-empty
+`EDITORIAL_EXTERNAL_API_TOKEN` through the process environment. The server defaults to
+`127.0.0.1:8080`; `EDITORIAL_EXTERNAL_API_HOST` and
+`EDITORIAL_EXTERNAL_API_PORT` may override that address.
+
+```shell
+python scripts/run_external_brief_api.py
+```
+
+Send JSON with a bearer token and a non-empty idempotency key:
+
+```shell
+curl -X POST http://127.0.0.1:8080/brief \
+  -H "Authorization: Bearer placeholder-local-token" \
+  -H "Idempotency-Key: launch-post-1" \
+  -H "Content-Type: application/json" \
+  -d '{"brief":"Write a concise LinkedIn post announcing the launch."}'
+```
+
+A successful response contains only the completed editorial result:
+
+```json
+{"status":"completed","result":"The completed editorial copy."}
+```
+
+Authentication is checked before validation or queue submission. Accepted first-time jobs
+use runtime source `EXTERNAL`, preserving the queue's FIFO and one-in-flight behavior.
+Idempotency state is process-local and protected across concurrent requests: repeating the
+same key and brief shares or returns the original response without another job, while using
+the key with a different brief returns `409`. Accepted workflow failures are cached and are
+not retried automatically. Queue rejections may be retried. All idempotency state resets
+when the server restarts.
+
+To demonstrate a cached repeat, run the `curl` command above twice without changing either
+the key or body. Both calls return the same response, and only the first submits an external
+runtime job. Placeholder tokens are examples only; never use them as real credentials.
+
 ## Runtime queue
 
 One application-owned, bounded FIFO queue is the execution boundary for runtime work.

@@ -122,6 +122,33 @@ class ConversationService:
         self._save_state(completed_state)
         return assistant_messages
 
+    def process_brief(self, brief: str) -> EditorialResult:
+        """Run a validated standalone brief through the shared writing workflow."""
+
+        try:
+            brief = require_non_blank(brief, "brief")
+        except ValueError:
+            raise ConversationServiceError("Invalid writing brief") from None
+        timestamp = self._timestamp()
+        task = WritingTask(
+            id=self._identifier("task"),
+            conversation_id=self._identifier("external"),
+            brief=WritingBrief(brief),
+            status=WritingTaskStatus.CREATED,
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
+        set_trace_stage("writing_workflow")
+        trace_event("writing_workflow_started", stage="writing_workflow")
+        result = self._execute_workflow(task)
+        trace_event(
+            "writing_workflow_completed",
+            stage="writing_workflow",
+            outcome="completed",
+            revision_applied=result.revision_applied,
+        )
+        return result
+
     def _load_state(self, conversation_id: str) -> ConversationState:
         try:
             state = self._store.load(conversation_id)
