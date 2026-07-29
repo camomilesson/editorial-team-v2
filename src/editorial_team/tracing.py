@@ -104,6 +104,9 @@ def error_category(error: BaseException) -> str:
             "Model returned invalid JSON object": "json_decoding_failure",
             "Model returned unexpected structured-output fields": "schema_validation_failure",
             "Coordinator returned invalid structured output": "domain_consistency_failure",
+            "Admin model call failed": "provider_model_failure",
+            "Admin returned invalid output": "blank_response",
+            "Admin returned invalid structured output": "domain_consistency_failure",
         }
         return categories.get(str(error), "agent_error")
     name = type(error).__name__

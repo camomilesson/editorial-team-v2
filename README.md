@@ -86,6 +86,20 @@ tasks, drafts, Critic reports, or raw model output. It is not queue persistence:
 the runtime queue and normal Telegram conversation state remain in memory and reset
 when the process restarts.
 
+### Privileged AdminAgent
+
+AdminAgent is an operational subagent that receives only an `OperationalSnapshot`
+and an immutable threshold policy. It chooses `SILENCE` or `NOTIFY`; application
+code independently applies the same deterministic policy and rejects conflicting
+model output before storing a result in SQLite.
+
+The default policy checks conditions in strict priority order: stopped worker,
+three or more failed jobs, queue occupancy at or above 0.8, then system healthy.
+AdminAgent cannot access conversations, user identities, editorial prompts, or
+drafts. It cannot send Telegram messages, write SQLite directly, or modify runtime
+state. Heartbeat scheduling, snapshot collection, and maintainer notification are
+not implemented yet.
+
 ## Structured-output reliability
 
 The Coordinator and Critic request provider-native, JSON Schema-constrained output.

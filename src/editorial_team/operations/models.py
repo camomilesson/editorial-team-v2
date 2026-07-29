@@ -35,6 +35,25 @@ _ALERT_REASONS = frozenset(
 )
 
 
+def validate_admin_decision(
+    decision: AdminDecision,
+    reason_code: AdminReasonCode,
+) -> None:
+    """Enforce the shared decision/reason contract."""
+
+    if not isinstance(decision, AdminDecision):
+        raise ValueError("decision must be an AdminDecision")
+    if not isinstance(reason_code, AdminReasonCode):
+        raise ValueError("reason_code must be an AdminReasonCode")
+    if (
+        decision is AdminDecision.SILENCE
+        and reason_code is not AdminReasonCode.SYSTEM_HEALTHY
+    ):
+        raise ValueError("SILENCE requires SYSTEM_HEALTHY")
+    if decision is AdminDecision.NOTIFY and reason_code not in _ALERT_REASONS:
+        raise ValueError("NOTIFY requires an alert reason")
+
+
 def _require_integer(value: int, field_name: str, *, positive: bool = False) -> None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{field_name} must be an integer")
@@ -86,16 +105,20 @@ class HeartbeatResult:
         object.__setattr__(self, "id", validate_identifier(self.id, "id"))
         if not isinstance(self.snapshot, OperationalSnapshot):
             raise ValueError("snapshot must be an OperationalSnapshot")
-        if not isinstance(self.decision, AdminDecision):
-            raise ValueError("decision must be an AdminDecision")
-        if not isinstance(self.reason_code, AdminReasonCode):
-            raise ValueError("reason_code must be an AdminReasonCode")
+        validate_admin_decision(self.decision, self.reason_code)
         if not isinstance(self.notification_sent, bool):
             raise ValueError("notification_sent must be a boolean")
         if self.decision is AdminDecision.SILENCE:
-            if self.reason_code is not AdminReasonCode.SYSTEM_HEALTHY:
-                raise ValueError("SILENCE requires SYSTEM_HEALTHY")
             if self.notification_sent:
                 raise ValueError("SILENCE cannot be marked as notified")
-        elif self.reason_code not in _ALERT_REASONS:
-            raise ValueError("NOTIFY requires an alert reason")
+
+
+@dataclass(frozen=True)
+class AdminAssessment:
+    """The AdminAgent's narrow structured output."""
+
+    decision: AdminDecision
+    reason_code: AdminReasonCode
+
+    def __post_init__(self) -> None:
+        validate_admin_decision(self.decision, self.reason_code)

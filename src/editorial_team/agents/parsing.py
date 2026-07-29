@@ -19,6 +19,11 @@ from editorial_team.models import (
     ModelResponse,
     StructuredOutputSpec,
 )
+from editorial_team.operations.models import (
+    AdminAssessment,
+    AdminDecision,
+    AdminReasonCode,
+)
 
 
 def execute_text(
@@ -106,6 +111,20 @@ def parse_critic_report(text: str, draft: str) -> CriticReport:
         )
     except (KeyError, TypeError, ValueError):
         raise AgentError("Critic returned invalid structured output") from None
+
+
+def parse_admin_assessment(text: str) -> AdminAssessment:
+    """Parse one exact AdminAssessment JSON object."""
+
+    value = _json_object(text)
+    _check_keys(value, required={"decision", "reason_code"}, optional=set())
+    try:
+        return AdminAssessment(
+            decision=AdminDecision(value["decision"]),
+            reason_code=AdminReasonCode(value["reason_code"]),
+        )
+    except (KeyError, TypeError, ValueError):
+        raise AgentError("Admin returned invalid structured output") from None
 
 
 def _json_object(text: str) -> dict[str, Any]:

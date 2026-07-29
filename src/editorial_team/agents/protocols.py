@@ -5,6 +5,20 @@ from __future__ import annotations
 from typing import Protocol
 
 from editorial_team.domain.editorial import CriticReport, WritingTask
+from editorial_team.operations.models import AdminAssessment, OperationalSnapshot
+from editorial_team.operations.policy import AdminPolicy
+
+
+class AdminAgent(Protocol):
+    """Evaluate only safe operational facts under an explicit policy."""
+
+    def evaluate(
+        self,
+        snapshot: OperationalSnapshot,
+        policy: AdminPolicy,
+    ) -> AdminAssessment:
+        """Return one structured operational assessment."""
+        ...
 
 
 class Writer(Protocol):

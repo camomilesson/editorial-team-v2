@@ -7,6 +7,7 @@ from typing import Any
 from editorial_team.domain.editorial import CriticIssueSeverity, CriticVerdict
 from editorial_team.domain.routing import CoordinatorRoute
 from editorial_team.models import StructuredOutputSpec
+from editorial_team.operations.models import AdminDecision, AdminReasonCode
 
 JSON_MIME_TYPE = "application/json"
 
@@ -53,6 +54,22 @@ CRITIC_REPORT_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+ADMIN_ASSESSMENT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "decision": {
+            "type": "string",
+            "enum": [decision.value for decision in AdminDecision],
+        },
+        "reason_code": {
+            "type": "string",
+            "enum": [reason.value for reason in AdminReasonCode],
+        },
+    },
+    "required": ["decision", "reason_code"],
+    "additionalProperties": False,
+}
+
 COORDINATOR_STRUCTURED_OUTPUT = StructuredOutputSpec(
     JSON_MIME_TYPE,
     COORDINATOR_DECISION_SCHEMA,
@@ -60,4 +77,8 @@ COORDINATOR_STRUCTURED_OUTPUT = StructuredOutputSpec(
 CRITIC_STRUCTURED_OUTPUT = StructuredOutputSpec(
     JSON_MIME_TYPE,
     CRITIC_REPORT_SCHEMA,
+)
+ADMIN_STRUCTURED_OUTPUT = StructuredOutputSpec(
+    JSON_MIME_TYPE,
+    ADMIN_ASSESSMENT_SCHEMA,
 )
