@@ -31,9 +31,19 @@ python scripts/run_telegram_bot.py
 ```
 
 Conversation state is in memory: restarting the process loses conversations and active
-tasks. Until the later event-queue milestone, Telegram turns are deliberately serialized
-with one in-flight turn at a time. This causes head-of-line blocking when a model call is
-slow; it is not the final queue design.
+tasks.
+
+## Runtime queue
+
+One application-owned, bounded FIFO queue is the execution boundary for runtime work.
+Telegram turns currently enter this queue; later webhook and heartbeat producers will use
+the same boundary. One asynchronous worker executes accepted jobs in deterministic order,
+isolates individual failures, and drains accepted work during graceful shutdown. Waiting
+capacity defaults to 100. The queue has no persistence or retries and does not survive a
+process restart. The deliberate trade-off is head-of-line blocking when one LLM workflow
+is slow in exchange for simple, serialized access to in-memory conversation state.
+Queue tracing measures waiting depth immediately after enqueue and after dequeue for
+start/completion events; the currently executing job is not included in that depth.
 
 The Coordinator routes messages to `CHAT`, `START_WRITING_TASK`, or `REVISE_TASK`.
 There is no explicit approval phase: the latest completed writing task remains available

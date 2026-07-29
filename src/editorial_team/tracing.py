@@ -81,6 +81,18 @@ def trace_event(event: str, **fields: Any) -> None:
     trace_logger.info(" ".join(parts))
 
 
+def trace_runtime_event(event: str, *, correlation_id: str, **fields: Any) -> None:
+    """Log one queue event using only explicit safe scalar metadata."""
+
+    parts = [
+        _safe(event),
+        f"correlation_id={_safe(correlation_id)}",
+    ]
+    for key, value in fields.items():
+        parts.append(f"{_safe(key)}={_safe(value)}")
+    trace_logger.info(" ".join(parts))
+
+
 def error_category(error: BaseException) -> str:
     """Return a sanitized category without exposing exception text."""
 

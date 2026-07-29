@@ -88,6 +88,12 @@ class Bot:
         self.actions.append(kwargs)
 
 
+class ImmediateRuntimeQueue:
+    async def submit(self, **kwargs: object) -> object:
+        operation = kwargs["operation"]
+        return await operation()  # type: ignore[operator]
+
+
 def update(update_id: int, text: str = "USER-CONTENT-SECRET") -> SimpleNamespace:
     return SimpleNamespace(
         update_id=update_id,
@@ -126,7 +132,11 @@ def run_turn(
     bot: Bot | None = None,
 ) -> Bot:
     telegram_bot = bot or Bot()
-    adapter = TelegramAdapter(application_service, handoff_delay=0)
+    adapter = TelegramAdapter(
+        application_service,
+        ImmediateRuntimeQueue(),  # type: ignore[arg-type]
+        handoff_delay=0,
+    )
     context = SimpleNamespace(bot=telegram_bot)
     asyncio.run(adapter.handle_text(update(update_id), context))
     return telegram_bot
@@ -398,7 +408,11 @@ def test_separate_turns_have_distinct_consistent_correlations(
         coordinator=CoordinatorDecision(CoordinatorRoute.CHAT, 1.0),
         talker="Safe reply",
     )
-    adapter = TelegramAdapter(app, handoff_delay=0)
+    adapter = TelegramAdapter(
+        app,
+        ImmediateRuntimeQueue(),  # type: ignore[arg-type]
+        handoff_delay=0,
+    )
     context = SimpleNamespace(bot=Bot())
 
     asyncio.run(adapter.handle_text(update(201), context))

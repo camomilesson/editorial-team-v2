@@ -12,6 +12,7 @@ from editorial_team.app.composition import (
 )
 from editorial_team.conversation import ConversationService, InMemoryConversationStateStore
 from editorial_team.models import FakeModelClient
+from editorial_team.runtime import DEFAULT_RUNTIME_QUEUE_CAPACITY, RuntimeQueue
 
 
 class NamedFakeModel(FakeModelClient):
@@ -79,9 +80,14 @@ def test_live_application_uses_real_adapter_and_sequential_telegram_configuratio
     assert isinstance(live.service, ConversationService)
     assert isinstance(live.store, InMemoryConversationStateStore)
     assert live.adapter._service is live.service
+    assert isinstance(live.runtime_queue, RuntimeQueue)
+    assert live.adapter._runtime_queue is live.runtime_queue
+    assert live.runtime_queue.capacity == DEFAULT_RUNTIME_QUEUE_CAPACITY
     assert live.model_name == "safe-test-model"
     assert live.telegram.update_processor.max_concurrent_updates == 1
     assert len(live.telegram.handlers[0]) == 2
+    assert live.telegram.post_init == live.adapter.start_runtime
+    assert live.telegram.post_shutdown == live.adapter.close_runtime
 
 
 def test_invalid_telegram_configuration_is_sanitized(

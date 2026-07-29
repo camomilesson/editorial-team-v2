@@ -20,6 +20,7 @@ from editorial_team.conversation import ConversationService, InMemoryConversatio
 from editorial_team.gemini import create_gemini_client_from_env
 from editorial_team.interfaces.telegram import TelegramAdapter, build_telegram_application
 from editorial_team.models import ModelClient
+from editorial_team.runtime import DEFAULT_RUNTIME_QUEUE_CAPACITY, RuntimeQueue
 from editorial_team.workflows import WritingWorkflow
 
 RECENT_MESSAGE_LIMIT = 50
@@ -37,6 +38,7 @@ class LiveApplication:
     service: ConversationService
     store: InMemoryConversationStateStore
     adapter: TelegramAdapter
+    runtime_queue: RuntimeQueue
     model_name: str
 
 
@@ -76,7 +78,8 @@ def build_live_application_from_env() -> LiveApplication:
         raise LiveConfigurationError("Required model configuration is missing or invalid") from None
 
     service, store = build_conversation_service(model)
-    adapter = TelegramAdapter(service)
+    runtime_queue = RuntimeQueue(DEFAULT_RUNTIME_QUEUE_CAPACITY)
+    adapter = TelegramAdapter(service, runtime_queue)
     try:
         telegram = build_telegram_application(token=token, adapter=adapter)
     except Exception:
@@ -86,5 +89,6 @@ def build_live_application_from_env() -> LiveApplication:
         service=service,
         store=store,
         adapter=adapter,
+        runtime_queue=runtime_queue,
         model_name=model.model,
     )

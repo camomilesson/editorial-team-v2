@@ -18,6 +18,11 @@ from telegram.ext import (
 
 from editorial_team.conversation import ConversationService
 from editorial_team.domain.conversation import Message
+from editorial_team.runtime import (
+    QueueCapacityError,
+    RuntimeJobSource,
+    RuntimeQueue,
+)
 from editorial_team.tracing import (
     bind_turn_trace,
     current_trace_stage,
@@ -33,6 +38,7 @@ ONBOARDING_MESSAGE = (
     "revise, translate, or proofread text together."
 )
 GENERIC_TURN_ERROR = "Sorry — I couldn’t complete that turn. Please try again."
+BUSY_TURN_ERROR = "Sorry — the team is busy right now. Please try again shortly."
 DEFAULT_HANDOFF_DELAY_SECONDS = 1.25
 AsyncSleeper = Callable[[float], Awaitable[None]]
 
@@ -92,6 +98,7 @@ class TelegramAdapter:
     def __init__(
         self,
         service: ConversationService,
+        runtime_queue: RuntimeQueue,
         *,
         handoff_delay: float = DEFAULT_HANDOFF_DELAY_SECONDS,
         sleeper: AsyncSleeper = asyncio.sleep,
@@ -106,9 +113,21 @@ class TelegramAdapter:
         if not callable(sleeper):
             raise ValueError("sleeper must be callable")
         self._service = service
+        self._runtime_queue = runtime_queue
         self._handoff_delay = float(handoff_delay)
         self._sleeper = sleeper
-        self._turn_lock = asyncio.Lock()
+
+    async def start_runtime(self, application: Application) -> None:
+        """Start the shared runtime worker with the Telegram application."""
+
+        del application
+        await self._runtime_queue.start()
+
+    async def close_runtime(self, application: Application) -> None:
+        """Drain and close the shared runtime worker on application shutdown."""
+
+        del application
+        await self._runtime_queue.close()
 
     async def start(
         self,
@@ -140,54 +159,76 @@ class TelegramAdapter:
             return
 
         trace = trace_for_update(update.update_id)
-        with bind_turn_trace(trace):
-            trace_event("telegram_turn_started", stage="telegram")
-            async with self._turn_lock:
-                try:
-                    assistant_messages = await asyncio.to_thread(
-                        self._service.process_message,
-                        conversation_id_for_chat(chat.id),
-                        message.text,
-                    )
-                except Exception as exc:
-                    trace_event(
-                        "telegram_turn_failed",
-                        stage=current_trace_stage(),
-                        outcome="failed",
-                        error_category=error_category(exc),
-                    )
-                    await context.bot.send_message(chat_id=chat.id, text=GENERIC_TURN_ERROR)
-                    return
+        async def operation() -> None:
+            with bind_turn_trace(trace):
+                await self._process_turn(
+                    chat_id=chat.id,
+                    text=message.text,
+                    context=context,
+                )
 
-                set_trace_stage("assistant_delivery")
-                trace_event(
-                    "assistant_delivery_started",
-                    stage="assistant_delivery",
-                    assistant_message_count=len(assistant_messages),
-                )
-                try:
-                    chunk_count = await self._send_messages(
-                        chat_id=chat.id,
-                        messages=assistant_messages,
-                        context=context,
-                    )
-                except Exception as exc:
-                    trace_event(
-                        "telegram_turn_failed",
-                        stage="assistant_delivery",
-                        outcome="failed",
-                        error_category=error_category(exc),
-                    )
-                    raise
-                trace_event(
-                    "assistant_delivery_completed",
-                    stage="assistant_delivery",
-                    outcome="completed",
-                    assistant_message_count=len(assistant_messages),
-                    chunk_count=chunk_count,
-                )
-                set_trace_stage("telegram")
-                trace_event("telegram_turn_completed", stage="telegram", outcome="completed")
+        try:
+            await self._runtime_queue.submit(
+                source=RuntimeJobSource.TELEGRAM,
+                correlation_id=trace.correlation_id,
+                operation=operation,
+            )
+        except QueueCapacityError:
+            await context.bot.send_message(chat_id=chat.id, text=BUSY_TURN_ERROR)
+
+    async def _process_turn(
+        self,
+        *,
+        chat_id: int,
+        text: str,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
+        trace_event("telegram_turn_started", stage="telegram")
+        try:
+            assistant_messages = await asyncio.to_thread(
+                self._service.process_message,
+                conversation_id_for_chat(chat_id),
+                text,
+            )
+        except Exception as exc:
+            trace_event(
+                "telegram_turn_failed",
+                stage=current_trace_stage(),
+                outcome="failed",
+                error_category=error_category(exc),
+            )
+            await context.bot.send_message(chat_id=chat_id, text=GENERIC_TURN_ERROR)
+            return
+
+        set_trace_stage("assistant_delivery")
+        trace_event(
+            "assistant_delivery_started",
+            stage="assistant_delivery",
+            assistant_message_count=len(assistant_messages),
+        )
+        try:
+            chunk_count = await self._send_messages(
+                chat_id=chat_id,
+                messages=assistant_messages,
+                context=context,
+            )
+        except Exception as exc:
+            trace_event(
+                "telegram_turn_failed",
+                stage="assistant_delivery",
+                outcome="failed",
+                error_category=error_category(exc),
+            )
+            raise
+        trace_event(
+            "assistant_delivery_completed",
+            stage="assistant_delivery",
+            outcome="completed",
+            assistant_message_count=len(assistant_messages),
+            chunk_count=chunk_count,
+        )
+        set_trace_stage("telegram")
+        trace_event("telegram_turn_completed", stage="telegram", outcome="completed")
 
     async def _send_messages(
         self,
@@ -219,7 +260,14 @@ def build_telegram_application(
 
     if not isinstance(token, str) or not token.strip():
         raise ValueError("Telegram token is required")
-    application = Application.builder().token(token).concurrent_updates(False).build()
+    application = (
+        Application.builder()
+        .token(token)
+        .concurrent_updates(False)
+        .post_init(adapter.start_runtime)
+        .post_shutdown(adapter.close_runtime)
+        .build()
+    )
     application.add_handler(CommandHandler("start", adapter.start))
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, adapter.handle_text)
