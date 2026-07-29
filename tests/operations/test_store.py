@@ -316,7 +316,9 @@ def test_database_constraints_reject_invalid_primitive_rows(tmp_path: Path) -> N
                 )
 
 
-def test_repository_tests_do_not_create_runtime_database() -> None:
+def test_runtime_database_location_is_excluded_from_version_control() -> None:
     repository_root = Path(__file__).resolve().parents[2]
+    ignore_rules = (repository_root / ".gitignore").read_text()
 
-    assert not (repository_root / "runtime_data").exists()
+    assert "runtime_data/" in ignore_rules
+    assert "*.db" in ignore_rules

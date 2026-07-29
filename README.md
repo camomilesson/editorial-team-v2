@@ -136,6 +136,22 @@ sqlite3 runtime_data/editorial_team.db \
    LIMIT 10;"
 ```
 
+### Heartbeat alert demo
+
+`scripts/demo_heartbeat_notify.py` intentionally sends one real synthetic
+repeated-failures alert through the normal AdminAgent, policy validation,
+SQLite, renderer, and Telegram notifier flow. Normal heartbeat configuration
+must be enabled and valid, and the additional explicit opt-in must normalize
+exactly to `true`:
+
+```shell
+EDITORIAL_HEARTBEAT_DEMO_NOTIFY=true python scripts/demo_heartbeat_notify.py
+```
+
+Warning: this command makes a real model call and sends a real synthetic alert
+to the configured maintainer Telegram chat. It does not start polling or the
+automatic heartbeat scheduler.
+
 ## Structured-output reliability
 
 The Coordinator and Critic request provider-native, JSON Schema-constrained output.
