@@ -8,6 +8,8 @@ from editorial_team.runtime.queue import (
     RuntimeJobSource,
     RuntimeQueue,
     RuntimeQueueError,
+    RuntimeQueueStats,
+    RuntimeSourceStats,
 )
 
 __all__ = [
@@ -18,4 +20,6 @@ __all__ = [
     "RuntimeJobSource",
     "RuntimeQueue",
     "RuntimeQueueError",
+    "RuntimeQueueStats",
+    "RuntimeSourceStats",
 ]

@@ -12,6 +12,13 @@ from editorial_team.app.composition import (
 )
 from editorial_team.conversation import ConversationService, InMemoryConversationStateStore
 from editorial_team.models import FakeModelClient
+from editorial_team.operations import (
+    HeartbeatEvaluationService,
+    HeartbeatRunner,
+    HeartbeatScheduler,
+    OperationalSnapshotCollector,
+    SQLiteHeartbeatResultStore,
+)
 from editorial_team.runtime import DEFAULT_RUNTIME_QUEUE_CAPACITY, RuntimeQueue
 
 
@@ -88,6 +95,9 @@ def test_live_application_uses_real_adapter_and_sequential_telegram_configuratio
     assert len(live.telegram.handlers[0]) == 2
     assert live.telegram.post_init == live.adapter.start_runtime
     assert live.telegram.post_shutdown == live.adapter.close_runtime
+    assert live.heartbeat is None
+    assert live.adapter._heartbeat_store is None
+    assert live.adapter._heartbeat_scheduler is None
 
 
 def test_invalid_telegram_configuration_is_sanitized(
@@ -124,3 +134,34 @@ def test_separate_compositions_do_not_share_in_memory_state() -> None:
     assert first_store is not second_store
     assert first_store.load("conversation-1") is None
     assert second_store.load("conversation-1") is None
+
+
+def test_enabled_heartbeat_reuses_shared_model_queue_and_bot(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    database = tmp_path / "heartbeat.db"
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:placeholder-token")
+    monkeypatch.setenv("EDITORIAL_HEARTBEAT_ENABLED", "true")
+    monkeypatch.setenv("EDITORIAL_HEARTBEAT_INTERVAL_SECONDS", "60")
+    monkeypatch.setenv("EDITORIAL_HEARTBEAT_DB_PATH", str(database))
+    monkeypatch.setenv("EDITORIAL_ADMIN_TELEGRAM_CHAT_ID", "-100123")
+    model = NamedFakeModel([])
+    monkeypatch.setattr(composition, "create_gemini_client_from_env", lambda: model)
+
+    live = build_live_application_from_env()
+
+    assert live.heartbeat is not None
+    heartbeat = live.heartbeat
+    assert isinstance(heartbeat.store, SQLiteHeartbeatResultStore)
+    assert isinstance(heartbeat.evaluation_service, HeartbeatEvaluationService)
+    assert isinstance(heartbeat.collector, OperationalSnapshotCollector)
+    assert isinstance(heartbeat.runner, HeartbeatRunner)
+    assert isinstance(heartbeat.scheduler, HeartbeatScheduler)
+    assert heartbeat.admin_agent._model is model
+    assert heartbeat.runner._runtime_queue is live.runtime_queue
+    assert heartbeat.collector._runtime_queue is live.runtime_queue
+    assert heartbeat.notifier._bot is live.telegram.bot
+    assert live.adapter._heartbeat_store is heartbeat.store
+    assert live.adapter._heartbeat_scheduler is heartbeat.scheduler
+    assert not database.exists()

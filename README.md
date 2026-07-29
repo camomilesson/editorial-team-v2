@@ -70,16 +70,14 @@ This smoke test is manual and is not performed by the automated test suite.
 
 ## Operational decision storage
 
-SQLite has one narrow role: durable storage of future heartbeat/Admin decisions.
+SQLite has one narrow role: durable storage of heartbeat/Admin decisions.
 Both `SILENCE` and `NOTIFY` outcomes are stored. `SILENCE` produces no Telegram
-output; a future `NOTIFY` flow will alert one configured maintainer destination
-and record whether that notification was sent. No heartbeat scheduler, AdminAgent,
-or notification delivery is implemented yet.
+output; `NOTIFY` alerts one configured maintainer destination and records whether
+that notification was sent.
 
-The illustrative local path is `runtime_data/editorial_team.db`, but callers inject
-the database path explicitly. The synchronous repository must be called from future
-async application code through one explicit nonblocking boundary such as
-`asyncio.to_thread`.
+The default local path is `runtime_data/editorial_team.db`, but callers inject the
+database path explicitly. Live asynchronous orchestration calls the synchronous
+repository through explicit `asyncio.to_thread` boundaries.
 
 This database stores no user messages, identities, prompts, conversations, writing
 tasks, drafts, Critic reports, or raw model output. It is not queue persistence:
@@ -97,8 +95,46 @@ The default policy checks conditions in strict priority order: stopped worker,
 three or more failed jobs, queue occupancy at or above 0.8, then system healthy.
 AdminAgent cannot access conversations, user identities, editorial prompts, or
 drafts. It cannot send Telegram messages, write SQLite directly, or modify runtime
-state. Heartbeat scheduling, snapshot collection, and maintainer notification are
-not implemented yet.
+state.
+
+### Optional live heartbeat
+
+The in-process heartbeat is disabled by default. Enable it with
+`EDITORIAL_HEARTBEAT_ENABLED=true` and configure
+`EDITORIAL_ADMIN_TELEGRAM_CHAT_ID`. The interval defaults to 900 seconds
+(15 minutes) and may be changed with `EDITORIAL_HEARTBEAT_INTERVAL_SECONDS`;
+live configuration rejects intervals below 10 seconds. The injected SQLite path
+defaults to `runtime_data/editorial_team.db` and can be changed with
+`EDITORIAL_HEARTBEAT_DB_PATH`.
+
+Each interval, the collector records waiting depth and calculates completed and
+failed `TELEGRAM` and `EXTERNAL` job deltas since the previous observation.
+`HEARTBEAT` jobs are excluded from their own observation window. The first
+observation counts relevant jobs since process startup. The heartbeat then joins
+the same bounded FIFO queue as user work, so it cannot interleave with a staged
+editorial workflow.
+
+The fixed Admin priority remains stopped worker, three or more recent failures,
+queue occupancy of at least 0.8, then healthy. Both outcomes are persisted.
+`SILENCE` sends nothing and remains `notification_sent=false`. `NOTIFY` sends
+deterministic, non-LLM prose to the configured maintainer chat and is marked sent
+only after successful delivery. Delivery or persistence failures are not retried.
+SQLite continues to store no chat ID, identity, message, prompt, or draft data.
+
+Because the scheduled runner depends on the same in-process queue worker,
+complete worker or process loss cannot be independently detected by this path.
+`WORKER_STOPPED` remains supported by policy and injected/forced evaluations; an
+external watchdog would be required for independent loss detection.
+
+Inspect recent operational decisions locally:
+
+```shell
+sqlite3 runtime_data/editorial_team.db \
+  "SELECT observed_at, decision, reason_code, notification_sent
+   FROM heartbeat_results
+   ORDER BY observed_at DESC
+   LIMIT 10;"
+```
 
 ## Structured-output reliability
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import math
 from collections.abc import Awaitable, Callable, Sequence
+from typing import Protocol
 
 from telegram import Update
 from telegram.constants import ChatAction, ChatType
@@ -41,6 +42,20 @@ GENERIC_TURN_ERROR = "Sorry — I couldn’t complete that turn. Please try agai
 BUSY_TURN_ERROR = "Sorry — the team is busy right now. Please try again shortly."
 DEFAULT_HANDOFF_DELAY_SECONDS = 1.25
 AsyncSleeper = Callable[[float], Awaitable[None]]
+
+
+class HeartbeatStoreLifecycle(Protocol):
+    """Synchronous initialization required by optional heartbeat startup."""
+
+    def initialize(self) -> None: ...
+
+
+class HeartbeatSchedulerLifecycle(Protocol):
+    """Asynchronous lifecycle required by optional heartbeat startup."""
+
+    async def start(self) -> None: ...
+
+    async def close(self) -> None: ...
 
 
 def conversation_id_for_chat(chat_id: int) -> str:
@@ -116,17 +131,37 @@ class TelegramAdapter:
         self._runtime_queue = runtime_queue
         self._handoff_delay = float(handoff_delay)
         self._sleeper = sleeper
+        self._heartbeat_store: HeartbeatStoreLifecycle | None = None
+        self._heartbeat_scheduler: HeartbeatSchedulerLifecycle | None = None
+
+    def configure_heartbeat(
+        self,
+        *,
+        store: HeartbeatStoreLifecycle,
+        scheduler: HeartbeatSchedulerLifecycle,
+    ) -> None:
+        """Attach optional heartbeat lifecycle components before startup."""
+
+        if self._heartbeat_store is not None or self._heartbeat_scheduler is not None:
+            raise ValueError("Heartbeat lifecycle is already configured")
+        self._heartbeat_store = store
+        self._heartbeat_scheduler = scheduler
 
     async def start_runtime(self, application: Application) -> None:
         """Start the shared runtime worker with the Telegram application."""
 
         del application
         await self._runtime_queue.start()
+        if self._heartbeat_store is not None and self._heartbeat_scheduler is not None:
+            await asyncio.to_thread(self._heartbeat_store.initialize)
+            await self._heartbeat_scheduler.start()
 
     async def close_runtime(self, application: Application) -> None:
         """Drain and close the shared runtime worker on application shutdown."""
 
         del application
+        if self._heartbeat_scheduler is not None:
+            await self._heartbeat_scheduler.close()
         await self._runtime_queue.close()
 
     async def start(

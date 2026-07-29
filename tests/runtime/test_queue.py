@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import UTC, datetime
 
 import pytest
 
@@ -264,3 +265,99 @@ def test_queue_tracing_is_structured_and_excludes_operation_content(
     assert "error_category=runtime_error" in trace
     assert "PAYLOAD-AND-EXCEPTION-SECRET" not in trace
     assert "operation=" not in trace
+
+
+def test_metrics_track_lifecycle_outcomes_and_sources_without_payloads() -> None:
+    now = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
+
+    async def scenario() -> None:
+        queue = RuntimeQueue(capacity=2, clock=lambda: now)
+        initial = queue.stats()
+        assert initial.worker_running is False
+        assert initial.waiting_depth == 0
+        assert initial.capacity == 2
+        assert all(item.completed_jobs == item.failed_jobs == 0 for item in initial.sources)
+
+        await queue.start()
+        assert queue.stats().worker_running is True
+
+        async def fail() -> None:
+            raise RuntimeError("PAYLOAD-EXCEPTION-SECRET")
+
+        result = await asyncio.gather(
+            queue.submit(
+                source=RuntimeJobSource.TELEGRAM,
+                correlation_id="metrics-success",
+                operation=lambda: asyncio.sleep(0, result="USER-PAYLOAD-SECRET"),
+            ),
+            queue.submit(
+                source=RuntimeJobSource.EXTERNAL,
+                correlation_id="metrics-failure",
+                operation=fail,
+            ),
+            return_exceptions=True,
+        )
+        assert result[0] == "USER-PAYLOAD-SECRET"
+        assert isinstance(result[1], RuntimeQueueError)
+
+        stats = queue.stats()
+        telegram = stats.for_source(RuntimeJobSource.TELEGRAM)
+        external = stats.for_source(RuntimeJobSource.EXTERNAL)
+        heartbeat = stats.for_source(RuntimeJobSource.HEARTBEAT)
+        assert (telegram.completed_jobs, telegram.failed_jobs) == (1, 0)
+        assert telegram.last_success_at == now
+        assert (external.completed_jobs, external.failed_jobs) == (0, 1)
+        assert external.last_success_at is None
+        assert (heartbeat.completed_jobs, heartbeat.failed_jobs) == (0, 0)
+        assert "USER-PAYLOAD-SECRET" not in repr(stats)
+        assert "PAYLOAD-EXCEPTION-SECRET" not in repr(stats)
+
+        await queue.close()
+        assert queue.stats().worker_running is False
+
+    asyncio.run(scenario())
+
+
+def test_rejected_job_does_not_change_outcome_counters_or_waiting_behavior() -> None:
+    async def scenario() -> None:
+        queue = RuntimeQueue(capacity=1)
+        await queue.start()
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def blocked() -> None:
+            started.set()
+            await release.wait()
+
+        first = asyncio.create_task(
+            queue.submit(
+                source=RuntimeJobSource.TELEGRAM,
+                correlation_id="metrics-blocked",
+                operation=blocked,
+            )
+        )
+        await started.wait()
+        second = asyncio.create_task(
+            queue.submit(
+                source=RuntimeJobSource.EXTERNAL,
+                correlation_id="metrics-waiting",
+                operation=lambda: asyncio.sleep(0),
+            )
+        )
+        while queue.stats().waiting_depth != 1:
+            await asyncio.sleep(0)
+        before = queue.stats()
+        with pytest.raises(QueueCapacityError):
+            await queue.submit(
+                source=RuntimeJobSource.HEARTBEAT,
+                correlation_id="metrics-rejected",
+                operation=lambda: asyncio.sleep(0),
+            )
+        after = queue.stats()
+        assert before.sources == after.sources
+        assert after.waiting_depth == 1
+        release.set()
+        await asyncio.gather(first, second)
+        await queue.close()
+
+    asyncio.run(scenario())

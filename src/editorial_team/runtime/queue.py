@@ -6,6 +6,7 @@ import asyncio
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, TypeVar
 from uuid import uuid4
@@ -43,6 +44,74 @@ class RuntimeJobSource(StrEnum):
 
 
 @dataclass(frozen=True)
+class RuntimeSourceStats:
+    """Immutable cumulative outcomes for one accepted-job source."""
+
+    source: RuntimeJobSource
+    completed_jobs: int
+    failed_jobs: int
+    last_success_at: datetime | None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.source, RuntimeJobSource):
+            raise ValueError("source must be a RuntimeJobSource")
+        for field_name, value in (
+            ("completed_jobs", self.completed_jobs),
+            ("failed_jobs", self.failed_jobs),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"{field_name} must be a nonnegative integer")
+        if self.last_success_at is not None and (
+            not isinstance(self.last_success_at, datetime)
+            or self.last_success_at.tzinfo is None
+            or self.last_success_at.utcoffset() is None
+            or self.last_success_at.utcoffset().total_seconds() != 0
+        ):
+            raise ValueError("last_success_at must use UTC")
+
+
+@dataclass(frozen=True)
+class RuntimeQueueStats:
+    """Safe read-only runtime metrics without job payloads or identifiers."""
+
+    worker_running: bool
+    waiting_depth: int
+    capacity: int
+    sources: tuple[RuntimeSourceStats, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.worker_running, bool):
+            raise ValueError("worker_running must be a boolean")
+        if (
+            isinstance(self.capacity, bool)
+            or not isinstance(self.capacity, int)
+            or self.capacity <= 0
+        ):
+            raise ValueError("capacity must be a positive integer")
+        if (
+            isinstance(self.waiting_depth, bool)
+            or not isinstance(self.waiting_depth, int)
+            or not 0 <= self.waiting_depth <= self.capacity
+        ):
+            raise ValueError("waiting_depth must be between zero and capacity")
+        if (
+            not isinstance(self.sources, tuple)
+            or not all(isinstance(item, RuntimeSourceStats) for item in self.sources)
+            or {item.source for item in self.sources} != set(RuntimeJobSource)
+            or len(self.sources) != len(RuntimeJobSource)
+        ):
+            raise ValueError("sources must contain each RuntimeJobSource exactly once")
+
+    def for_source(self, source: RuntimeJobSource) -> RuntimeSourceStats:
+        """Return cumulative metrics for one source."""
+
+        for item in self.sources:
+            if item.source is source:
+                return item
+        raise ValueError("Runtime job source is unavailable")
+
+
+@dataclass(frozen=True)
 class _QueuedJob:
     job_id: str
     source: RuntimeJobSource
@@ -58,20 +127,51 @@ _STOP = object()
 class RuntimeQueue:
     """Accept bounded opaque jobs and execute them serially in FIFO order."""
 
-    def __init__(self, capacity: int = DEFAULT_RUNTIME_QUEUE_CAPACITY) -> None:
+    def __init__(
+        self,
+        capacity: int = DEFAULT_RUNTIME_QUEUE_CAPACITY,
+        *,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
         if (
             isinstance(capacity, bool)
             or not isinstance(capacity, int)
             or capacity <= 0
         ):
             raise ValueError("capacity must be a positive integer")
+        if not callable(clock):
+            raise ValueError("clock must be callable")
         self.capacity = capacity
+        self._clock = clock
         self._queue: asyncio.Queue[_QueuedJob | object] = asyncio.Queue(
             maxsize=capacity
         )
         self._worker: asyncio.Task[None] | None = None
         self._accepting = False
         self._closed = False
+        self._completed = {source: 0 for source in RuntimeJobSource}
+        self._failed = {source: 0 for source in RuntimeJobSource}
+        self._last_success: dict[RuntimeJobSource, datetime | None] = {
+            source: None for source in RuntimeJobSource
+        }
+
+    def stats(self) -> RuntimeQueueStats:
+        """Return an immutable instantaneous metrics snapshot."""
+
+        return RuntimeQueueStats(
+            worker_running=self._worker is not None and not self._worker.done(),
+            waiting_depth=self._queue.qsize(),
+            capacity=self.capacity,
+            sources=tuple(
+                RuntimeSourceStats(
+                    source=source,
+                    completed_jobs=self._completed[source],
+                    failed_jobs=self._failed[source],
+                    last_success_at=self._last_success[source],
+                )
+                for source in RuntimeJobSource
+            ),
+        )
 
     async def start(self) -> None:
         """Start exactly one worker; repeated calls are safely idempotent."""
@@ -194,7 +294,16 @@ class RuntimeQueue:
         )
         try:
             value = await job.operation()
+            success_at = self._clock()
+            if (
+                not isinstance(success_at, datetime)
+                or success_at.tzinfo is None
+                or success_at.utcoffset() is None
+                or success_at.utcoffset().total_seconds() != 0
+            ):
+                raise RuntimeQueueError("Runtime queue clock is invalid")
         except Exception as exc:
+            self._failed[job.source] += 1
             trace_runtime_event(
                 "runtime_job_failed",
                 correlation_id=job.correlation_id,
@@ -208,6 +317,8 @@ class RuntimeQueue:
             if not job.result.done():
                 job.result.set_exception(RuntimeQueueError("Runtime job failed"))
             return
+        self._completed[job.source] += 1
+        self._last_success[job.source] = success_at
         trace_runtime_event(
             "runtime_job_completed",
             correlation_id=job.correlation_id,

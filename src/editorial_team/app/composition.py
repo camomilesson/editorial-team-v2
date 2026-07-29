@@ -10,16 +10,30 @@ from uuid import uuid4
 from telegram.ext import Application
 
 from editorial_team.agents import (
+    LlmAdminAgent,
     LlmCoordinator,
     LlmCritic,
     LlmEditor,
     LlmTalker,
     LlmWriter,
 )
+from editorial_team.app.heartbeat_config import (
+    HeartbeatConfigurationError,
+    load_heartbeat_configuration,
+)
 from editorial_team.conversation import ConversationService, InMemoryConversationStateStore
 from editorial_team.gemini import create_gemini_client_from_env
+from editorial_team.interfaces.admin import TelegramMaintainerNotifier
 from editorial_team.interfaces.telegram import TelegramAdapter, build_telegram_application
 from editorial_team.models import ModelClient
+from editorial_team.operations import (
+    AdminPolicy,
+    HeartbeatEvaluationService,
+    HeartbeatRunner,
+    HeartbeatScheduler,
+    OperationalSnapshotCollector,
+    SQLiteHeartbeatResultStore,
+)
 from editorial_team.runtime import DEFAULT_RUNTIME_QUEUE_CAPACITY, RuntimeQueue
 from editorial_team.workflows import WritingWorkflow
 
@@ -40,6 +54,20 @@ class LiveApplication:
     adapter: TelegramAdapter
     runtime_queue: RuntimeQueue
     model_name: str
+    heartbeat: HeartbeatComponents | None
+
+
+@dataclass(frozen=True)
+class HeartbeatComponents:
+    """Exactly one composed instance of every optional heartbeat component."""
+
+    store: SQLiteHeartbeatResultStore
+    admin_agent: LlmAdminAgent
+    evaluation_service: HeartbeatEvaluationService
+    collector: OperationalSnapshotCollector
+    notifier: TelegramMaintainerNotifier
+    runner: HeartbeatRunner
+    scheduler: HeartbeatScheduler
 
 
 def build_conversation_service(
@@ -73,6 +101,11 @@ def build_live_application_from_env() -> LiveApplication:
         raise LiveConfigurationError("Required Telegram configuration is missing")
 
     try:
+        heartbeat_configuration = load_heartbeat_configuration()
+    except HeartbeatConfigurationError:
+        raise LiveConfigurationError("Heartbeat configuration is invalid") from None
+
+    try:
         model = create_gemini_client_from_env()
     except Exception:
         raise LiveConfigurationError("Required model configuration is missing or invalid") from None
@@ -84,6 +117,46 @@ def build_live_application_from_env() -> LiveApplication:
         telegram = build_telegram_application(token=token, adapter=adapter)
     except Exception:
         raise LiveConfigurationError("Telegram configuration is invalid") from None
+    heartbeat: HeartbeatComponents | None = None
+    if heartbeat_configuration.enabled:
+        if heartbeat_configuration.maintainer_chat_id is None:
+            raise LiveConfigurationError("Heartbeat configuration is invalid")
+        heartbeat_store = SQLiteHeartbeatResultStore(
+            heartbeat_configuration.database_path
+        )
+        admin_agent = LlmAdminAgent(model)
+        evaluation_service = HeartbeatEvaluationService(
+            admin_agent=admin_agent,
+            store=heartbeat_store,
+            policy=AdminPolicy(),
+            identifier_generator=lambda: f"heartbeat-result-{uuid4().hex}",
+        )
+        collector = OperationalSnapshotCollector(runtime_queue)
+        notifier = TelegramMaintainerNotifier(
+            telegram.bot,
+            heartbeat_configuration.maintainer_chat_id,
+        )
+        runner = HeartbeatRunner(
+            runtime_queue=runtime_queue,
+            collector=collector,
+            evaluation_service=evaluation_service,
+            store=heartbeat_store,
+            notifier=notifier,
+        )
+        scheduler = HeartbeatScheduler(
+            runner,
+            interval_seconds=heartbeat_configuration.interval_seconds,
+        )
+        adapter.configure_heartbeat(store=heartbeat_store, scheduler=scheduler)
+        heartbeat = HeartbeatComponents(
+            store=heartbeat_store,
+            admin_agent=admin_agent,
+            evaluation_service=evaluation_service,
+            collector=collector,
+            notifier=notifier,
+            runner=runner,
+            scheduler=scheduler,
+        )
     return LiveApplication(
         telegram=telegram,
         service=service,
@@ -91,4 +164,5 @@ def build_live_application_from_env() -> LiveApplication:
         adapter=adapter,
         runtime_queue=runtime_queue,
         model_name=model.model,
+        heartbeat=heartbeat,
     )
