@@ -78,6 +78,8 @@ def test_live_application_uses_real_adapter_and_sequential_telegram_configuratio
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:placeholder-token")
+    monkeypatch.setenv("EDITORIAL_HEARTBEAT_ENABLED", "false")
+
     model = NamedFakeModel([])
     monkeypatch.setattr(composition, "create_gemini_client_from_env", lambda: model)
 
