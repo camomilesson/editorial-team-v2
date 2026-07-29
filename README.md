@@ -18,20 +18,70 @@ pytest
 Use `.env.example` as a configuration reference and provide `GEMINI_API_KEY` through
 the process environment to use the Gemini adapter.
 
-## Local Telegram bot
+## Combined live application
 
-The live adapter supports private Telegram chats using long polling. Group chats and
-non-text updates are deliberately ignored in this first slice.
+The recommended class-demo runtime starts Telegram long polling, the external brief HTTP
+API, and the optional heartbeat in one process over exactly one shared `RuntimeQueue`.
+Heartbeat therefore observes both `TELEGRAM` and `EXTERNAL` activity.
 
-Provide `GEMINI_API_KEY`, `AGENT_MODEL`, and `TELEGRAM_BOT_TOKEN` through the process
-environment supplied by your shell or editor. The application does not load `.env` files.
+Provide `GEMINI_API_KEY`, `AGENT_MODEL`, `TELEGRAM_BOT_TOKEN`, and a non-empty
+`EDITORIAL_EXTERNAL_API_TOKEN` through the process environment supplied by your shell,
+editor, or the real ignored `.env`. `.env.example` intentionally leaves credentials blank;
+missing or blank required configuration stops startup safely. The application does not
+load `.env` files itself.
 
 ```shell
-python scripts/run_telegram_bot.py
+python scripts/run_live_application.py
 ```
 
 Conversation state is in memory: restarting the process loses conversations and active
 tasks.
+
+## Standalone external brief API
+
+The external brief server exposes one synchronous authenticated endpoint that sends a
+standalone writing brief through the Writer–Critic–Editor workflow. This focused
+development/testing command runs in a separate process with its own process-local queue and
+metrics. It does not start Telegram polling or heartbeat, so Telegram heartbeat cannot
+observe its `EXTERNAL` activity.
+
+Provide `GEMINI_API_KEY`, `AGENT_MODEL`, and a non-empty
+`EDITORIAL_EXTERNAL_API_TOKEN` through the process environment. The server defaults to
+`127.0.0.1:8080`; `EDITORIAL_EXTERNAL_API_HOST` and
+`EDITORIAL_EXTERNAL_API_PORT` may override that address.
+
+```shell
+python scripts/run_external_brief_api.py
+```
+
+Send JSON with a bearer token and a non-empty idempotency key:
+
+```shell
+curl -X POST http://127.0.0.1:8080/brief \
+  -H "Authorization: Bearer placeholder-local-token" \
+  -H "Idempotency-Key: launch-post-1" \
+  -H "Content-Type: application/json" \
+  -d '{"brief":"Write a concise LinkedIn post announcing the launch."}'
+```
+
+A successful response contains only the completed editorial result:
+
+```json
+{"status":"completed","result":"The completed editorial copy."}
+```
+
+For `POST /brief`, authentication is checked before request framing, body reading,
+validation, or queue submission. Accepted first-time jobs
+use runtime source `EXTERNAL`, preserving the queue's FIFO and one-in-flight behavior.
+Idempotency state is process-local and protected across concurrent requests: repeating the
+same key and brief shares or returns the original response without another job, while using
+the key with a different brief returns `409`. Accepted workflow failures are cached and are
+not retried automatically. Queue rejections may be retried. All idempotency state resets
+when the server restarts.
+
+To demonstrate a cached repeat, run the `curl` command above twice without changing either
+the key or body. Both calls return the same response, and only the first submits an external
+runtime job. Placeholder tokens are examples only; never use them as real credentials.
 
 ## Runtime queue
 
