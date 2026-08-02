@@ -5,6 +5,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from langgraph.checkpoint.memory import InMemorySaver
 from telegram.ext import Application
 
 from editorial_team.app import composition
@@ -20,7 +21,7 @@ from editorial_team.app.composition import (
     build_live_application_from_env,
 )
 from editorial_team.conversation import ConversationService, InMemoryConversationStateStore
-from editorial_team.models import FakeModelClient
+from editorial_team.models import FakeModelClient, ModelResponse
 from editorial_team.operations import (
     HeartbeatEvaluationService,
     HeartbeatRunner,
@@ -49,6 +50,41 @@ def test_build_conversation_service_wires_real_components_with_in_memory_store()
     assert service._workflow._writer._model is model
     assert service._workflow._critic._model is model
     assert service._workflow._editor._model is model
+    assert isinstance(service._graph_checkpointer, InMemorySaver)
+    assert service._graph_runner.checkpointer is service._graph_checkpointer
+
+
+def test_composed_conversation_service_executes_the_compiled_parent_graph() -> None:
+    model = NamedFakeModel(
+        [
+            ModelResponse(
+                text=(
+                    '{"route":"chat","confidence":1.0,'
+                    '"task_input":null,"revision_instructions":null}'
+                ),
+                tool_calls=(),
+                continuation_token="coordinator-response",
+            ),
+            ModelResponse(
+                text="Exact graph-backed response",
+                tool_calls=(),
+                continuation_token="talker-response",
+            ),
+        ]
+    )
+    service, store = build_conversation_service(model)
+
+    messages = service.process_message("conversation-1", "Hello")
+
+    assert len(messages) == 1
+    assert messages[0].content.endswith("Exact graph-backed response")
+    completed = store.load("conversation-1")
+    assert completed is not None
+    assert completed.recent_messages[-1] == messages[0]
+    checkpoint = service._graph_runner.get_state(
+        {"configurable": {"thread_id": "editorial:v1:conversation-1"}}
+    )
+    assert checkpoint.values["completed_conversation"] == completed
 
 
 def test_external_composition_reuses_one_service_model_and_queue(

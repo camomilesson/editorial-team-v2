@@ -29,6 +29,7 @@ from editorial_team.app.heartbeat_config import (
 )
 from editorial_team.conversation import ConversationService, InMemoryConversationStateStore
 from editorial_team.gemini import create_gemini_client_from_env
+from editorial_team.graphs import build_parent_graph, create_in_memory_checkpointer
 from editorial_team.interfaces.admin import TelegramMaintainerNotifier
 from editorial_team.interfaces.external_http import (
     ExternalBriefHttpAdapter,
@@ -173,19 +174,45 @@ def build_conversation_service(
     """Wire the real agents around one shared provider-neutral model client."""
 
     store = InMemoryConversationStateStore()
+    coordinator = LlmCoordinator(model)
+    talker = LlmTalker(model)
+    writer = LlmWriter(model)
+    critic = LlmCritic(model)
+    editor = LlmEditor(model)
+
+    def identifier_generator() -> str:
+        return uuid4().hex
+
+    def clock() -> datetime:
+        return datetime.now(UTC)
+
     workflow = WritingWorkflow(
-        writer=LlmWriter(model),
-        critic=LlmCritic(model),
-        editor=LlmEditor(model),
+        writer=writer,
+        critic=critic,
+        editor=editor,
     )
+    checkpointer = create_in_memory_checkpointer()
+    graph_runner = build_parent_graph(
+        coordinator=coordinator,
+        talker=talker,
+        writer=writer,
+        critic=critic,
+        editor=editor,
+        store=store,
+        identifier_generator=identifier_generator,
+        clock=clock,
+        max_recent_messages=RECENT_MESSAGE_LIMIT,
+    ).compile(checkpointer=checkpointer)
     service = ConversationService(
-        coordinator=LlmCoordinator(model),
-        talker=LlmTalker(model),
+        coordinator=coordinator,
+        talker=talker,
         workflow=workflow,
         store=store,
-        identifier_generator=lambda: uuid4().hex,
-        clock=lambda: datetime.now(UTC),
+        identifier_generator=identifier_generator,
+        clock=clock,
         max_recent_messages=RECENT_MESSAGE_LIMIT,
+        graph_runner=graph_runner,
+        graph_checkpointer=checkpointer,
     )
     return service, store
 

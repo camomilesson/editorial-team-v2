@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime
+from typing import Any
 
 from editorial_team.contracts.common import require_non_blank, require_utc_timestamp
 from editorial_team.contracts.identity import validate_identifier
@@ -28,7 +29,7 @@ from editorial_team.domain.editorial import (
     WritingTask,
     WritingTaskStatus,
 )
-from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
+from editorial_team.domain.routing import CoordinatorDecision
 from editorial_team.errors import ServiceError
 from editorial_team.tracing import (
     current_trace_stage,
@@ -58,6 +59,8 @@ class ConversationService:
         identifier_generator: IdentifierGenerator,
         clock: UtcClock,
         max_recent_messages: int,
+        graph_runner: Any | None = None,
+        graph_checkpointer: Any | None = None,
     ) -> None:
         if (
             isinstance(max_recent_messages, bool)
@@ -72,53 +75,53 @@ class ConversationService:
         self._identifier_generator = identifier_generator
         self._clock = clock
         self._max_recent_messages = max_recent_messages
+        if graph_runner is None:
+            from editorial_team.graphs import (
+                build_parent_graph,
+                create_in_memory_checkpointer,
+            )
+
+            graph_checkpointer = create_in_memory_checkpointer()
+            graph_runner = build_parent_graph(
+                coordinator=coordinator,
+                talker=talker,
+                workflow=workflow,
+                store=store,
+                identifier_generator=identifier_generator,
+                clock=clock,
+                max_recent_messages=max_recent_messages,
+            ).compile(checkpointer=graph_checkpointer)
+        self._graph_runner = graph_runner
+        self._graph_checkpointer = graph_checkpointer
 
     def process_message(self, conversation_id: str, text: str) -> tuple[Message, ...]:
         """Process one turn and return only its assistant messages."""
 
         try:
-            conversation_id = validate_identifier(conversation_id, "conversation_id")
-            require_non_blank(text, "text")
-        except ValueError:
-            raise ConversationServiceError("Invalid conversation input") from None
-
-        state = self._load_state(conversation_id)
-        user_message = self._message(
-            conversation_id=conversation_id,
-            role=MessageRole.USER,
-            content=text,
-        )
-        state_with_user = replace(
-            state,
-            recent_messages=(*state.recent_messages, user_message),
-        )
-        decision = self._decide(state_with_user, user_message)
-        trace_event("route_started", route=decision.route)
-
-        if decision.route is CoordinatorRoute.CHAT:
-            routed_state, contents = self._chat(state_with_user, user_message)
-        elif decision.route is CoordinatorRoute.START_WRITING_TASK:
-            routed_state, contents = self._start_task(state_with_user, decision)
-        elif decision.route is CoordinatorRoute.REVISE_TASK:
-            routed_state, contents = self._revise_task(state_with_user, decision)
-        else:
-            raise ConversationServiceError("Coordinator returned an unsupported route")
-
-        assistant_messages = tuple(
-            self._message(
-                conversation_id=conversation_id,
-                role=MessageRole.ASSISTANT,
-                content=content,
+            graph_state = self._graph_runner.invoke(
+                {
+                    "state_version": 1,
+                    "invocation_kind": "conversation",
+                    "conversation_id": conversation_id,
+                    "input_text": text,
+                },
+                {
+                    "configurable": {
+                        "thread_id": f"editorial:v1:{conversation_id}",
+                    }
+                },
             )
-            for content in contents
-        )
-        completed_state = replace(
-            routed_state,
-            recent_messages=(
-                *routed_state.recent_messages,
-                *assistant_messages,
-            )[-self._max_recent_messages :],
-        )
+        except ConversationServiceError as exc:
+            raise ConversationServiceError(str(exc)) from None
+        assistant_messages = graph_state.get("assistant_messages")
+        completed_state = graph_state.get("completed_conversation")
+        if (
+            not isinstance(assistant_messages, tuple)
+            or not assistant_messages
+            or not all(isinstance(message, Message) for message in assistant_messages)
+            or not isinstance(completed_state, ConversationState)
+        ):
+            raise ConversationServiceError("Conversation graph returned an invalid result")
         self._save_state(completed_state)
         return assistant_messages
 
