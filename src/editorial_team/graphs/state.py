@@ -1,44 +1,38 @@
-"""Typed, versioned state shared by future editorial graphs."""
+"""Versioned state for the authoritative conversation graph."""
 
 from typing import Literal, Required, TypedDict
 
 from editorial_team.domain.conversation import ConversationState, Message
-from editorial_team.domain.editorial import (
-    CriticReport,
-    EditorialResult,
-    WritingTask,
-)
+from editorial_team.domain.editorial import CriticReport, EditorialResult, WritingTask
 from editorial_team.domain.routing import CoordinatorDecision
 
 EDITORIAL_GRAPH_STATE_VERSION = 1
-GraphInvocationKind = Literal["conversation", "external_brief"]
+GraphInvocationKind = Literal["conversation"]
 
 
 class EditorialGraphStateV1(TypedDict, total=False):
-    """Checkpointable state contract for version one of the future graphs.
+    """Durable conversation state plus transient fields for one graph turn.
 
-    Required entry metadata is marked explicitly. The remaining fields are
-    populated by later graph nodes and intentionally use the existing immutable,
-    provider-neutral domain models.
+    ``conversation`` is the sole durable product state. Other optional values exist
+    only while a turn executes, except ``assistant_messages`` which is retained as
+    the facade's result until the next turn starts.
     """
 
     state_version: Required[Literal[1]]
     invocation_kind: Required[GraphInvocationKind]
     conversation_id: str
-    input_text: str
-    prior_conversation: ConversationState
-    user_message: Message
-    decision: CoordinatorDecision
-    talker_response: str
-    writing_task: WritingTask
-    writer_output: str
-    critic_report: CriticReport
-    working_draft: str
-    editorial_result: EditorialResult
-    assistant_contents: tuple[str, ...]
-    assistant_messages: tuple[Message, ...]
-    routed_conversation: ConversationState
-    completed_conversation: ConversationState
+    input_text: str | None
+    conversation: ConversationState
+    turn_conversation: ConversationState | None
+    user_message: Message | None
+    decision: CoordinatorDecision | None
+    talker_response: str | None
+    writing_task: WritingTask | None
+    writer_output: str | None
+    critic_report: CriticReport | None
+    working_draft: str | None
+    editorial_result: EditorialResult | None
+    assistant_messages: tuple[Message, ...] | None
 
 
 class GraphStateVersionError(ValueError):

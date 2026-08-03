@@ -24,7 +24,6 @@ def source(
 def stats(
     *,
     telegram: tuple[int, int] = (0, 0),
-    external: tuple[int, int] = (0, 0),
     heartbeat: tuple[int, int] = (0, 0),
     worker_running: bool = True,
     depth: int = 2,
@@ -35,7 +34,6 @@ def stats(
         capacity=100,
         sources=(
             source(RuntimeJobSource.TELEGRAM, *telegram, NOW - timedelta(minutes=2)),
-            source(RuntimeJobSource.EXTERNAL, *external, NOW - timedelta(minutes=1)),
             source(RuntimeJobSource.HEARTBEAT, *heartbeat, NOW),
         ),
     )
@@ -52,8 +50,8 @@ class FakeQueue:
 def test_first_and_later_observations_use_product_job_deltas() -> None:
     queue = FakeQueue(
         [
-            stats(telegram=(4, 1), external=(2, 3), heartbeat=(20, 10)),
-            stats(telegram=(6, 2), external=(5, 3), heartbeat=(21, 11)),
+            stats(telegram=(4, 1), heartbeat=(20, 10)),
+            stats(telegram=(6, 2), heartbeat=(21, 11)),
         ]
     )
     collector = OperationalSnapshotCollector(queue, clock=lambda: NOW)  # type: ignore[arg-type]
@@ -61,9 +59,9 @@ def test_first_and_later_observations_use_product_job_deltas() -> None:
     first = collector.collect()
     second = collector.collect()
 
-    assert (first.completed_jobs, first.failed_jobs) == (6, 4)
-    assert (second.completed_jobs, second.failed_jobs) == (5, 1)
-    assert first.last_success_at == NOW - timedelta(minutes=1)
+    assert (first.completed_jobs, first.failed_jobs) == (4, 1)
+    assert (second.completed_jobs, second.failed_jobs) == (2, 1)
+    assert first.last_success_at == NOW - timedelta(minutes=2)
     assert first.worker_running is True
     assert first.queue_depth == 2
     assert first.queue_capacity == 100
@@ -85,8 +83,8 @@ def test_counter_decrease_is_treated_as_safe_reset_without_negative_delta() -> N
     collector = OperationalSnapshotCollector(
         FakeQueue(
             [
-                stats(telegram=(10, 8), external=(5, 4)),
-                stats(telegram=(2, 1), external=(1, 0)),
+                stats(telegram=(10, 8)),
+                stats(telegram=(2, 1)),
             ]
         ),  # type: ignore[arg-type]
         clock=lambda: NOW,
@@ -95,7 +93,7 @@ def test_counter_decrease_is_treated_as_safe_reset_without_negative_delta() -> N
     collector.collect()
     reset_window = collector.collect()
 
-    assert reset_window.completed_jobs == 3
+    assert reset_window.completed_jobs == 2
     assert reset_window.failed_jobs == 1
     assert reset_window.completed_jobs >= 0
     assert reset_window.failed_jobs >= 0

@@ -1,232 +1,218 @@
-"""Partially implemented parent conversation routing graph."""
+"""Authoritative LangGraph conversation orchestration."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 from langgraph.graph import END, START, StateGraph
 
-from editorial_team.contracts.common import require_non_blank
+from editorial_team.agents.protocols import Critic, Editor, Writer
+from editorial_team.contracts.common import require_non_blank, require_utc_timestamp
 from editorial_team.contracts.identity import validate_identifier
+from editorial_team.conversation.formatting import (
+    format_critic_report,
+    format_editor_message,
+    format_talker_message,
+    format_writer_message,
+)
+from editorial_team.conversation.protocols import Coordinator, Talker
 from editorial_team.domain.conversation import ConversationState, Message, MessageRole
 from editorial_team.domain.editorial import (
-    CriticReport,
     EditorialResult,
     WritingBrief,
     WritingTask,
     WritingTaskStatus,
 )
 from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
-from editorial_team.graphs.editorial import build_editorial_subgraph
-from editorial_team.graphs.state import (
-    EditorialGraphStateV1,
-    validate_graph_state_version,
+from editorial_team.errors import ServiceError
+from editorial_team.graphs.editorial import EditorialGraphError, build_editorial_subgraph
+from editorial_team.graphs.state import EditorialGraphStateV1, validate_graph_state_version
+from editorial_team.tracing import (
+    current_trace_stage,
+    error_category,
+    set_trace_stage,
+    trace_event,
 )
-
-if TYPE_CHECKING:
-    from editorial_team.agents.protocols import Critic, Editor, Writer
-    from editorial_team.conversation.protocols import (
-        ConversationStateStore,
-        Coordinator,
-        Talker,
-        WritingWorkflowRunner,
-    )
-    from editorial_team.conversation.service import ConversationService
 
 IdentifierGenerator = Callable[[], str]
 UtcClock = Callable[[], datetime]
-
 ParentRoute = Literal["chat", "start_writing_task", "revise_task"]
 
 
-class _WorkflowGraphAdapter:
-    """Expose an existing workflow runner through the editorial node contract."""
-
-    def __init__(self, workflow: WritingWorkflowRunner) -> None:
-        self._workflow = workflow
-
-    def invoke(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
-        task = state.get("writing_task")
-        if not isinstance(task, WritingTask):
-            raise ValueError("Invalid writing task")
-        result = self._workflow.execute(task)
-        if not isinstance(result, EditorialResult):
-            return {"editorial_result": result}  # type: ignore[typeddict-item]
-        return {
-            "writer_output": result.writer_output,
-            "critic_report": result.critic_report,
-            "working_draft": result.working_draft,
-            "editorial_result": result,
-        }
+class ConversationGraphError(ServiceError):
+    """A sanitized failure from the conversation graph."""
 
 
-class _ParentRoutingNodes:
-    """Node adapters around the current ConversationService behavior."""
-
+class _ConversationNodes:
     def __init__(
         self,
-        service: ConversationService,
-        error_type: type[Exception],
+        *,
+        coordinator: Coordinator,
+        talker: Talker,
         editorial_graph: Any,
+        identifier_generator: IdentifierGenerator,
+        clock: UtcClock,
         max_recent_messages: int,
     ) -> None:
-        self._service = service
-        self._error_type = error_type
+        self._coordinator = coordinator
+        self._talker = talker
         self._editorial_graph = editorial_graph
+        self._identifier_generator = identifier_generator
+        self._clock = clock
         self._max_recent_messages = max_recent_messages
 
-    def validate_and_prepare_turn(
-        self,
-        state: EditorialGraphStateV1,
-    ) -> EditorialGraphStateV1:
-        """Validate input, load prior state, and create the exact user message."""
-
+    def validate_and_prepare_turn(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
         validate_graph_state_version(state)
-        conversation_id = state.get("conversation_id")
-        text = state.get("input_text")
         try:
-            conversation_id = validate_identifier(conversation_id, "conversation_id")  # type: ignore[arg-type]
-            require_non_blank(text, "text")  # type: ignore[arg-type]
+            conversation_id = validate_identifier(state.get("conversation_id"), "conversation_id")  # type: ignore[arg-type]
+            text = require_non_blank(state.get("input_text"), "input_text")  # type: ignore[arg-type]
         except ValueError:
-            raise self._error_type("Invalid conversation input") from None
-
-        prior = self._service._load_state(conversation_id)
-        user_message = self._service._message(
-            conversation_id=conversation_id,
-            role=MessageRole.USER,
-            content=text,  # type: ignore[arg-type]
+            raise ConversationGraphError("Invalid conversation input") from None
+        conversation = state.get("conversation")
+        if conversation is None:
+            conversation = ConversationState(conversation_id)
+        if (
+            not isinstance(conversation, ConversationState)
+            or conversation.conversation_id != conversation_id
+        ):
+            raise ConversationGraphError("Conversation state is invalid")
+        user_message = self._message(conversation_id, MessageRole.USER, text)
+        turn_conversation = replace(
+            conversation,
+            recent_messages=(*conversation.recent_messages, user_message),
         )
         return {
-            "conversation_id": conversation_id,
-            "prior_conversation": prior,
+            "turn_conversation": turn_conversation,
             "user_message": user_message,
+            "decision": None,
+            "talker_response": None,
+            "writing_task": None,
+            "writer_output": None,
+            "critic_report": None,
+            "working_draft": None,
+            "editorial_result": None,
+            "assistant_messages": None,
         }
 
     def coordinator(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
-        """Return the same validated Coordinator decision as ConversationService."""
-
-        prepared, user_message = self._prepared_turn(state)
-        decision = self._service._decide(prepared, user_message)
-        from editorial_team.tracing import trace_event
-
+        conversation, user_message = self._turn(state)
+        set_trace_stage("coordinator")
+        trace_event(
+            "coordinator_started",
+            active_task=conversation.active_task is not None,
+            task_status=None
+            if conversation.active_task is None
+            else conversation.active_task.status,
+        )
+        try:
+            decision = self._coordinator.decide(conversation, user_message)
+        except Exception as exc:
+            trace_event(
+                "coordinator_failed",
+                stage="coordinator",
+                outcome="failed",
+                error_category=error_category(exc),
+            )
+            raise ConversationGraphError("Coordinator failed") from None
+        if not isinstance(decision, CoordinatorDecision):
+            raise ConversationGraphError("Coordinator returned an invalid decision")
+        try:
+            CoordinatorDecision(
+                decision.route,
+                decision.confidence,
+                task_input=decision.task_input,
+                revision_instructions=decision.revision_instructions,
+            )
+        except (TypeError, ValueError):
+            raise ConversationGraphError("Coordinator returned an invalid decision") from None
+        trace_event("coordinator_completed", route=decision.route, outcome="completed")
         trace_event("route_started", route=decision.route)
         return {"decision": decision}
 
     def talker(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
-        """Return the same validated plain-text Talker response."""
+        conversation, user_message = self._turn(state)
+        set_trace_stage("talker")
+        trace_event("talker_started", stage="talker")
+        try:
+            response = self._talker.respond(conversation, user_message)
+        except Exception as exc:
+            trace_event(
+                "talker_failed",
+                stage="talker",
+                outcome="failed",
+                error_category=error_category(exc),
+            )
+            raise ConversationGraphError("Talker failed") from None
+        try:
+            response = require_non_blank(response, "response")
+        except ValueError:
+            trace_event(
+                "talker_failed", stage="talker", outcome="failed", error_category="blank_response"
+            )
+            raise ConversationGraphError("Talker returned an invalid response") from None
+        trace_event("talker_completed", stage="talker", outcome="completed")
+        return {"talker_response": response}
 
-        prepared, user_message = self._prepared_turn(state)
-        return {"talker_response": self._service._talk(prepared, user_message)}
-
-    def prepare_new_task(
-        self,
-        state: EditorialGraphStateV1,
-    ) -> EditorialGraphStateV1:
-        """Create the same initial task as ConversationService."""
-
-        from editorial_team.tracing import set_trace_stage, trace_event
-
+    def prepare_new_task(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
         set_trace_stage("writing_workflow")
         trace_event("writing_workflow_started", stage="writing_workflow")
-        decision = self._require_decision(state)
+        decision = self._decision(state)
         if decision.task_input is None:
-            raise self._error_type("Writing task input is invalid")
-        conversation_id = state.get("conversation_id")
-        timestamp = self._service._timestamp()
-        task = WritingTask(
-            id=self._service._identifier("task"),
-            conversation_id=conversation_id,  # type: ignore[arg-type]
-            brief=WritingBrief(decision.task_input),
-            status=WritingTaskStatus.CREATED,
-            created_at=timestamp,
-            updated_at=timestamp,
-        )
-        return {"writing_task": task}
+            raise ConversationGraphError("Writing task input is invalid")
+        conversation, _ = self._turn(state)
+        now = self._timestamp()
+        return {
+            "writing_task": WritingTask(
+                self._identifier("task"),
+                conversation.conversation_id,
+                WritingBrief(decision.task_input),
+                WritingTaskStatus.CREATED,
+                now,
+                now,
+            )
+        }
 
-    def prepare_revision(
-        self,
-        state: EditorialGraphStateV1,
-    ) -> EditorialGraphStateV1:
-        """Prepare the latest task with one appended revision instruction."""
-
-        from editorial_team.tracing import set_trace_stage, trace_event
-
+    def prepare_revision(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
         set_trace_stage("revision_workflow")
         trace_event("revision_workflow_started", stage="revision_workflow")
-        prepared, _ = self._prepared_turn(state)
-        task = self._service._require_latest_task(prepared)
-        decision = self._require_decision(state)
+        conversation, _ = self._turn(state)
+        task = conversation.active_task
+        if (
+            task is None
+            or task.status not in {WritingTaskStatus.REVIEWED, WritingTaskStatus.REVISED}
+            or task.critic_report is None
+            or task.working_draft is None
+        ):
+            raise ConversationGraphError("No writing task is available for revision")
+        decision = self._decision(state)
         if decision.revision_instructions is None:
-            raise self._error_type("Revision instructions are invalid")
+            raise ConversationGraphError("Revision instructions are invalid")
         try:
             brief = replace(
                 task.brief,
-                instructions=(
-                    *task.brief.instructions,
-                    decision.revision_instructions,
-                ),
+                instructions=(*task.brief.instructions, decision.revision_instructions),
             )
-            workflow_task = replace(task, brief=brief)
+            return {"writing_task": replace(task, brief=brief)}
         except (TypeError, ValueError):
-            raise self._error_type("Revision task is invalid") from None
-        return {"writing_task": workflow_task}
+            raise ConversationGraphError("Revision task is invalid") from None
 
-    def editorial_subgraph(
-        self,
-        state: EditorialGraphStateV1,
-    ) -> EditorialGraphStateV1:
-        """Run the existing editorial subgraph behind the service error boundary."""
-
-        from editorial_team.tracing import (
-            current_trace_stage,
-            error_category,
-            set_trace_stage,
-            trace_event,
-        )
-
+    def editorial_subgraph(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
         try:
             output = self._editorial_graph.invoke(state)
-        except Exception as exc:
+        except EditorialGraphError as exc:
             trace_event(
                 "writing_workflow_failed",
                 stage=current_trace_stage(),
                 outcome="failed",
                 error_category=error_category(exc),
             )
-            raise self._error_type("Writing workflow failed") from None
-        set_trace_stage("writing_workflow")
+            raise ConversationGraphError("Writing workflow failed") from None
         result = output.get("editorial_result")
         if not isinstance(result, EditorialResult):
-            trace_event(
-                "writing_workflow_failed",
-                stage="writing_workflow",
-                outcome="failed",
-                error_category="schema_validation_failure",
-            )
-            raise self._error_type("Writing workflow returned an invalid result")
-        try:
-            CriticReport(
-                verdict=result.critic_report.verdict,
-                summary=result.critic_report.summary,
-                issues=result.critic_report.issues,
-            )
-            EditorialResult(
-                writer_output=result.writer_output,
-                critic_report=result.critic_report,
-                working_draft=result.working_draft,
-                revision_applied=result.revision_applied,
-            )
-        except (TypeError, ValueError):
-            trace_event(
-                "writing_workflow_failed",
-                stage="writing_workflow",
-                outcome="failed",
-                error_category="domain_consistency_failure",
-            )
-            raise self._error_type("Writing workflow returned an invalid result") from None
+            raise ConversationGraphError("Writing workflow returned an invalid result")
         return {
             "writer_output": result.writer_output,
             "critic_report": result.critic_report,
@@ -234,141 +220,133 @@ class _ParentRoutingNodes:
             "editorial_result": result,
         }
 
-    def finalize_task(
-        self,
-        state: EditorialGraphStateV1,
-    ) -> EditorialGraphStateV1:
-        """Map a successful editorial result to the canonical active task."""
-
-        from editorial_team.tracing import set_trace_stage, trace_event
-
-        decision = self._require_decision(state)
+    def finalize_task(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
+        conversation, _ = self._turn(state)
+        decision = self._decision(state)
         task = state.get("writing_task")
         result = state.get("editorial_result")
         if not isinstance(task, WritingTask) or not isinstance(result, EditorialResult):
-            raise self._error_type("Writing workflow returned an invalid result")
-
+            raise ConversationGraphError("Writing workflow returned an invalid result")
+        status = (
+            WritingTaskStatus.REVISED if result.revision_applied else WritingTaskStatus.REVIEWED
+        )
         if decision.route is CoordinatorRoute.START_WRITING_TASK:
-            set_trace_stage("writing_workflow")
-            trace_event(
-                "writing_workflow_completed",
-                stage="writing_workflow",
-                outcome="completed",
-                critic_verdict=result.critic_report.verdict,
-                revision_applied=result.revision_applied,
-            )
             active_task = WritingTask(
-                id=task.id,
-                conversation_id=task.conversation_id,
-                brief=task.brief,
-                status=self._service._completed_status(result),
-                created_at=task.created_at,
-                updated_at=self._service._timestamp(),
-                working_draft=result.working_draft,
-                critic_report=result.critic_report,
+                task.id,
+                task.conversation_id,
+                task.brief,
+                status,
+                task.created_at,
+                self._timestamp(),
+                result.working_draft,
+                result.critic_report,
             )
+            stage = "writing_workflow"
         elif decision.route is CoordinatorRoute.REVISE_TASK:
-            set_trace_stage("revision_workflow")
-            trace_event(
-                "revision_workflow_completed",
-                stage="revision_workflow",
-                outcome="completed",
-                critic_verdict=result.critic_report.verdict,
-                revision_applied=result.revision_applied,
-            )
             active_task = replace(
                 task,
-                status=self._service._completed_status(result),
+                status=status,
+                updated_at=self._timestamp(),
                 working_draft=result.working_draft,
                 critic_report=result.critic_report,
-                updated_at=self._service._timestamp(),
             )
+            stage = "revision_workflow"
         else:
-            raise self._error_type("Coordinator returned an unsupported route")
+            raise ConversationGraphError("Coordinator returned an unsupported route")
+        set_trace_stage(stage)
+        trace_event(
+            f"{stage}_completed",
+            stage=stage,
+            outcome="completed",
+            critic_verdict=result.critic_report.verdict,
+            revision_applied=result.revision_applied,
+        )
+        return {"turn_conversation": replace(conversation, active_task=active_task)}
 
-        prepared, _ = self._prepared_turn(state)
-        return {"routed_conversation": replace(prepared, active_task=active_task)}
-
-    def finalize_turn(
-        self,
-        state: EditorialGraphStateV1,
-    ) -> EditorialGraphStateV1:
-        """Construct exact assistant messages and completed conversation state."""
-
-        from editorial_team.conversation.formatting import format_talker_message
-
-        decision = self._require_decision(state)
+    def finalize_turn(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
+        conversation, _ = self._turn(state)
+        decision = self._decision(state)
         if decision.route is CoordinatorRoute.CHAT:
-            routed_state, _ = self._prepared_turn(state)
             response = state.get("talker_response")
             if not isinstance(response, str):
-                raise self._error_type("Talker returned an invalid response")
+                raise ConversationGraphError("Talker returned an invalid response")
             contents = (format_talker_message(response),)
         else:
-            routed_state = state.get("routed_conversation")
             result = state.get("editorial_result")
-            if not isinstance(routed_state, ConversationState) or not isinstance(
-                result, EditorialResult
-            ):
-                raise self._error_type("Writing workflow returned an invalid result")
-            contents = self._service._writing_messages(result)
-
-        conversation_id = state.get("conversation_id")
-        assistant_messages = tuple(
-            self._service._message(
-                conversation_id=conversation_id,  # type: ignore[arg-type]
-                role=MessageRole.ASSISTANT,
-                content=content,
+            if not isinstance(result, EditorialResult):
+                raise ConversationGraphError("Writing workflow returned an invalid result")
+            contents = (
+                format_writer_message(result.writer_output),
+                format_critic_report(result.critic_report),
+                format_editor_message(result),
             )
+        messages = tuple(
+            self._message(conversation.conversation_id, MessageRole.ASSISTANT, content)
             for content in contents
         )
-        completed_state = replace(
-            routed_state,
-            recent_messages=(
-                *routed_state.recent_messages,
-                *assistant_messages,
-            )[-self._max_recent_messages :],
+        completed = replace(
+            conversation,
+            recent_messages=(*conversation.recent_messages, *messages)[
+                -self._max_recent_messages :
+            ],
         )
         return {
-            "assistant_contents": contents,
-            "assistant_messages": assistant_messages,
-            "completed_conversation": completed_state,
+            "conversation": completed,
+            "assistant_messages": messages,
+            "input_text": None,
+            "turn_conversation": None,
+            "user_message": None,
+            "decision": None,
+            "talker_response": None,
+            "writing_task": None,
+            "writer_output": None,
+            "critic_report": None,
+            "working_draft": None,
+            "editorial_result": None,
         }
 
-    def _require_decision(
-        self,
-        state: EditorialGraphStateV1,
-    ) -> CoordinatorDecision:
+    @staticmethod
+    def _turn(state: EditorialGraphStateV1) -> tuple[ConversationState, Message]:
+        conversation = state.get("turn_conversation")
+        message = state.get("user_message")
+        if not isinstance(conversation, ConversationState) or not isinstance(message, Message):
+            raise ConversationGraphError("Invalid conversation input")
+        return conversation, message
+
+    @staticmethod
+    def _decision(state: EditorialGraphStateV1) -> CoordinatorDecision:
         decision = state.get("decision")
         if not isinstance(decision, CoordinatorDecision):
-            raise self._error_type("Coordinator returned an invalid decision")
+            raise ConversationGraphError("Coordinator returned an invalid decision")
         return decision
 
-    def _prepared_turn(
-        self,
-        state: EditorialGraphStateV1,
-    ) -> tuple[ConversationState, Message]:
-        prior = state.get("prior_conversation")
-        user_message = state.get("user_message")
-        if not isinstance(prior, ConversationState) or not isinstance(
-            user_message, Message
-        ):
-            raise self._error_type("Invalid conversation input")
-        return (
-            replace(
-                prior,
-                recent_messages=(*prior.recent_messages, user_message),
-            ),
-            user_message,
-        )
+    def _identifier(self, kind: str) -> str:
+        try:
+            return validate_identifier(self._identifier_generator(), f"{kind}_id")
+        except Exception:
+            raise ConversationGraphError("Identifier generation failed") from None
+
+    def _timestamp(self) -> datetime:
+        try:
+            return require_utc_timestamp(self._clock(), "timestamp")
+        except Exception:
+            raise ConversationGraphError("Clock failed") from None
+
+    def _message(self, conversation_id: str, role: MessageRole, content: str) -> Message:
+        try:
+            return Message(
+                self._identifier("message"), conversation_id, role, content, self._timestamp()
+            )
+        except ConversationGraphError:
+            raise
+        except (TypeError, ValueError):
+            raise ConversationGraphError("Message creation failed") from None
 
 
 def _route_coordinator_decision(state: EditorialGraphStateV1) -> ParentRoute:
-    """Describe the future parent branch using a validated domain decision."""
-
     decision = state.get("decision")
-    if decision is None:
-        raise ValueError("Parent graph state has no Coordinator decision")
+    if not isinstance(decision, CoordinatorDecision):
+        raise ConversationGraphError("Coordinator returned an invalid decision")
     return decision.route.value
 
 
@@ -376,52 +354,25 @@ def build_parent_graph(
     *,
     coordinator: Coordinator,
     talker: Talker,
-    store: ConversationStateStore,
+    writer: Writer,
+    critic: Critic,
+    editor: Editor,
     identifier_generator: IdentifierGenerator,
     clock: UtcClock,
     max_recent_messages: int,
-    writer: Writer | None = None,
-    critic: Critic | None = None,
-    editor: Editor | None = None,
-    workflow: WritingWorkflowRunner | None = None,
 ) -> StateGraph[EditorialGraphStateV1]:
-    """Build the complete but disconnected parent routing graph.
+    """Build the complete authoritative conversation graph."""
 
-    The graph mirrors ConversationService but is not connected to application
-    composition, repositories, transports, or any production request path.
-    """
-
-    from editorial_team.conversation.service import (
-        ConversationService,
-        ConversationServiceError,
-    )
-
-    if workflow is not None:
-        if any(participant is not None for participant in (writer, critic, editor)):
-            raise ValueError("Provide either workflow or editorial participants")
-        editorial_graph: Any = _WorkflowGraphAdapter(workflow)
-    else:
-        if writer is None or critic is None or editor is None:
-            raise ValueError("Editorial participants are required")
-        editorial_graph = build_editorial_subgraph(
-            writer=writer,
-            critic=critic,
-            editor=editor,
-        ).compile()
-
-    service = object.__new__(ConversationService)
-    service._coordinator = coordinator
-    service._talker = talker
-    service._workflow = workflow
-    service._store = store
-    service._identifier_generator = identifier_generator
-    service._clock = clock
-    service._max_recent_messages = max_recent_messages
-    nodes = _ParentRoutingNodes(
-        service,
-        ConversationServiceError,
-        editorial_graph,
-        max_recent_messages,
+    editorial_graph = build_editorial_subgraph(
+        writer=writer, critic=critic, editor=editor
+    ).compile()
+    nodes = _ConversationNodes(
+        coordinator=coordinator,
+        talker=talker,
+        editorial_graph=editorial_graph,
+        identifier_generator=identifier_generator,
+        clock=clock,
+        max_recent_messages=max_recent_messages,
     )
     graph = StateGraph(EditorialGraphStateV1)
     graph.add_node("validate_and_prepare_turn", nodes.validate_and_prepare_turn)
@@ -432,16 +383,15 @@ def build_parent_graph(
     graph.add_node("editorial_subgraph", nodes.editorial_subgraph)
     graph.add_node("finalize_task", nodes.finalize_task)
     graph.add_node("finalize_turn", nodes.finalize_turn)
-
     graph.add_edge(START, "validate_and_prepare_turn")
     graph.add_edge("validate_and_prepare_turn", "coordinator")
     graph.add_conditional_edges(
         "coordinator",
         _route_coordinator_decision,
         {
-            CoordinatorRoute.CHAT.value: "talker",
-            CoordinatorRoute.START_WRITING_TASK.value: "prepare_new_task",
-            CoordinatorRoute.REVISE_TASK.value: "prepare_revision",
+            "chat": "talker",
+            "start_writing_task": "prepare_new_task",
+            "revise_task": "prepare_revision",
         },
     )
     graph.add_edge("talker", "finalize_turn")

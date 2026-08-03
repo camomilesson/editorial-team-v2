@@ -45,10 +45,7 @@ def validate_admin_decision(
         raise ValueError("decision must be an AdminDecision")
     if not isinstance(reason_code, AdminReasonCode):
         raise ValueError("reason_code must be an AdminReasonCode")
-    if (
-        decision is AdminDecision.SILENCE
-        and reason_code is not AdminReasonCode.SYSTEM_HEALTHY
-    ):
+    if decision is AdminDecision.SILENCE and reason_code is not AdminReasonCode.SYSTEM_HEALTHY:
         raise ValueError("SILENCE requires SYSTEM_HEALTHY")
     if decision is AdminDecision.NOTIFY and reason_code not in _ALERT_REASONS:
         raise ValueError("NOTIFY requires an alert reason")

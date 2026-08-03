@@ -1,38 +1,31 @@
-"""Tests for the process-local graph checkpointer factory."""
+"""Tests for durable SQLite checkpoint construction."""
 
-from datetime import UTC, datetime
+import os
+from pathlib import Path
 
-from langgraph.checkpoint.memory import InMemorySaver
+import pytest
+from langgraph.checkpoint.sqlite import SqliteSaver
 
-from editorial_team.domain.conversation import ConversationState, Message, MessageRole
-from editorial_team.graphs import create_in_memory_checkpointer
-
-
-def test_factory_returns_fresh_in_memory_checkpointers() -> None:
-    first = create_in_memory_checkpointer()
-    second = create_in_memory_checkpointer()
-
-    assert isinstance(first, InMemorySaver)
-    assert isinstance(second, InMemorySaver)
-    assert first is not second
+from editorial_team.graphs import create_sqlite_checkpointer
 
 
-def test_checkpointer_serializer_round_trips_allowed_domain_state() -> None:
-    checkpointer = create_in_memory_checkpointer()
-    state = ConversationState(
-        "conversation-1",
-        recent_messages=(
-            Message(
-                "message-1",
-                "conversation-1",
-                MessageRole.USER,
-                "Hello",
-                datetime(2026, 8, 2, tzinfo=UTC),
-            ),
-        ),
-    )
+def test_sqlite_checkpointer_initializes_and_closes(tmp_path: Path) -> None:
+    database = tmp_path / "nested" / "conversations.db"
+    saver, close = create_sqlite_checkpointer(database)
+    assert isinstance(saver, SqliteSaver)
+    assert database.exists()
+    if os.name == "posix":
+        assert database.stat().st_mode & 0o777 == 0o600
+        assert database.parent.stat().st_mode & 0o777 == 0o700
+    close()
 
-    type_name, payload = checkpointer.serde.dumps_typed(state)
-    restored = checkpointer.serde.loads_typed((type_name, payload))
 
-    assert restored == state
+@pytest.mark.parametrize("timeout", [-1, float("nan"), float("inf"), True])
+def test_sqlite_checkpointer_rejects_invalid_busy_timeout(
+    tmp_path: Path, timeout: object
+) -> None:
+    with pytest.raises(ValueError, match="busy timeout"):
+        create_sqlite_checkpointer(
+            tmp_path / "state.db",
+            busy_timeout_seconds=timeout,  # type: ignore[arg-type]
+        )

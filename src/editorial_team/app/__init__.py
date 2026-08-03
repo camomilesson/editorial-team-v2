@@ -1,24 +1,19 @@
 """Live application composition."""
 
+from editorial_team.app.checkpoint_config import (
+    DEFAULT_CHECKPOINT_BUSY_TIMEOUT_SECONDS,
+    DEFAULT_CHECKPOINT_DB_PATH,
+    CheckpointConfiguration,
+    CheckpointConfigurationError,
+    load_checkpoint_configuration,
+)
 from editorial_team.app.composition import (
     RECENT_MESSAGE_LIMIT,
-    CombinedLiveApplication,
-    CombinedRuntimeLifecycle,
-    ExternalApiApplication,
     HeartbeatComponents,
     LiveApplication,
     LiveConfigurationError,
-    build_combined_live_application_from_env,
     build_conversation_service,
-    build_external_api_application,
     build_live_application_from_env,
-)
-from editorial_team.app.external_config import (
-    DEFAULT_EXTERNAL_API_HOST,
-    DEFAULT_EXTERNAL_API_PORT,
-    ExternalApiConfiguration,
-    ExternalApiConfigurationError,
-    load_external_api_configuration,
 )
 from editorial_team.app.heartbeat_config import (
     DEFAULT_HEARTBEAT_DB_PATH,
@@ -28,28 +23,31 @@ from editorial_team.app.heartbeat_config import (
     HeartbeatConfigurationError,
     load_heartbeat_configuration,
 )
+from editorial_team.app.telegram_config import (
+    TelegramConfiguration,
+    TelegramConfigurationError,
+    load_telegram_configuration,
+)
 
 __all__ = [
     "RECENT_MESSAGE_LIMIT",
-    "CombinedLiveApplication",
-    "CombinedRuntimeLifecycle",
-    "DEFAULT_EXTERNAL_API_HOST",
-    "DEFAULT_EXTERNAL_API_PORT",
+    "DEFAULT_CHECKPOINT_DB_PATH",
+    "DEFAULT_CHECKPOINT_BUSY_TIMEOUT_SECONDS",
     "DEFAULT_HEARTBEAT_DB_PATH",
     "DEFAULT_HEARTBEAT_INTERVAL_SECONDS",
     "MIN_LIVE_HEARTBEAT_INTERVAL_SECONDS",
-    "ExternalApiApplication",
-    "ExternalApiConfiguration",
-    "ExternalApiConfigurationError",
     "HeartbeatComponents",
+    "CheckpointConfiguration",
+    "CheckpointConfigurationError",
     "HeartbeatConfiguration",
     "HeartbeatConfigurationError",
     "LiveApplication",
     "LiveConfigurationError",
+    "TelegramConfiguration",
+    "TelegramConfigurationError",
     "build_conversation_service",
-    "build_combined_live_application_from_env",
-    "build_external_api_application",
     "build_live_application_from_env",
     "load_heartbeat_configuration",
-    "load_external_api_configuration",
+    "load_checkpoint_configuration",
+    "load_telegram_configuration",
 ]

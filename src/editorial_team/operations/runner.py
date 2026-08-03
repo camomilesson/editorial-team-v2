@@ -32,9 +32,7 @@ class HeartbeatRunner:
         evaluation_service: HeartbeatEvaluationService,
         store: HeartbeatResultStore,
         notifier: MaintainerNotifier,
-        correlation_id_generator: Callable[[], str] = (
-            lambda: f"heartbeat-{uuid4().hex}"
-        ),
+        correlation_id_generator: Callable[[], str] = (lambda: f"heartbeat-{uuid4().hex}"),
     ) -> None:
         self._runtime_queue = runtime_queue
         self._collector = collector
@@ -106,9 +104,7 @@ class HeartbeatRunner:
                             outcome="failed",
                             error_category=error_category(exc),
                         )
-                        raise HeartbeatRunnerError(
-                            "Heartbeat notification failed"
-                        ) from None
+                        raise HeartbeatRunnerError("Heartbeat notification failed") from None
                     trace_runtime_event(
                         "heartbeat_notification_completed",
                         correlation_id=correlation_id,

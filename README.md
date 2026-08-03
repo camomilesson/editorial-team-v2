@@ -1,182 +1,360 @@
 # Editorial Team v2
 
-Provider-neutral infrastructure for a conversational editorial assistant.
+Editorial Team v2 is a conversational editorial assistant delivered through Telegram. It
+can handle ordinary conversation, start a writing task, review a draft, apply editorial
+changes, and revise the latest task across later messages and application restarts.
 
-This foundation contains model-client boundaries, a Gemini adapter, validation helpers,
-sanitized errors, and a generic tool registry. Product behavior is intentionally out of scope.
+LangGraph is the sole conversation orchestrator and state owner. The retired REST `/brief`
+interface, separate conversation store, and legacy `WritingWorkflow` are not part of this
+version.
 
-## Development
+## Setup
 
-Requires Python 3.11 or newer.
+Requirements:
+
+- Python 3.11
+- A Gemini API key
+- A Telegram bot token from BotFather
+- At least one Telegram chat ID to allowlist
+
+Create a virtual environment and install the project with its development tools:
 
 ```shell
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
-ruff check .
-pytest
 ```
 
-Use `.env.example` as a configuration reference and provide `GEMINI_API_KEY` through
-the process environment to use the Gemini adapter.
+On Windows PowerShell, activate the environment with:
 
-## Combined live application
+```powershell
+.venv\Scripts\Activate.ps1
+```
 
-The recommended class-demo runtime starts Telegram long polling, the external brief HTTP
-API, and the optional heartbeat in one process over exactly one shared `RuntimeQueue`.
-Heartbeat therefore observes both `TELEGRAM` and `EXTERNAL` activity.
+Create a local configuration file:
 
-Provide `GEMINI_API_KEY`, `AGENT_MODEL`, `TELEGRAM_BOT_TOKEN`, and a non-empty
-`EDITORIAL_EXTERNAL_API_TOKEN` through the process environment supplied by your shell,
-editor, or the real ignored `.env`. `.env.example` intentionally leaves credentials blank;
-missing or blank required configuration stops startup safely. The application does not
-load `.env` files itself.
+```shell
+cp .env.example .env
+```
+
+Edit `.env` and provide at least:
+
+```dotenv
+MODEL_PROVIDER=gemini
+AGENT_MODEL=gemini-3.1-flash-lite
+GEMINI_API_KEY=replace-with-your-key
+TELEGRAM_BOT_TOKEN=replace-with-your-token
+EDITORIAL_TELEGRAM_ALLOWED_CHAT_IDS=123456789,-1001234567890
+EDITORIAL_CHECKPOINT_DB_PATH=runtime_data/conversations.db
+EDITORIAL_CHECKPOINT_BUSY_TIMEOUT_SECONDS=5
+```
+
+`EDITORIAL_TELEGRAM_ALLOWED_CHAT_IDS` is a required comma-separated list of exact numeric
+Telegram chat IDs. Positive IDs commonly identify private chats; group and supergroup IDs
+are commonly negative. Only listed chats reach the runtime queue. Channels and unlisted
+private chats, groups, or supergroups are ignored. Forum topics share the allowlisted group
+ID but receive distinct conversation identities through Telegram's `message_thread_id`.
+
+The application deliberately does not parse `.env` files itself. Load the edited file into
+the current shell before starting it:
+
+```shell
+set -a
+source .env
+set +a
+```
+
+Keep `.env` private and never commit it.
+
+### Telegram group setup
+
+Telegram privacy mode is enabled for bots by default. With privacy mode enabled, ordinary
+group messages may not reach the bot even when the group ID is allowlisted, although commands
+such as `/start` do. To process ordinary group messages, disable group privacy through
+BotFather or configure the bot appropriately as a group administrator. After changing privacy
+mode, the bot may need to be removed from and re-added to the group.
+
+Private-chat operation has been live-smoke-tested. Ordinary group-message operation was not
+live-smoke-tested in this session; it is covered by automated transport tests.
+
+## Run and verify
+
+Start the production Telegram polling application:
 
 ```shell
 python scripts/run_live_application.py
 ```
 
-Conversation state is in memory: restarting the process loses conversations and active
-tasks.
+Stop cleanly with `Ctrl-C`. Shutdown drains accepted queue work and closes the checkpoint
+connection. It does not delete stored conversation data. Restart with the same
+`EDITORIAL_CHECKPOINT_DB_PATH` and the same Telegram chat/topic identity to resume the latest
+conversation and canonical working draft.
 
-## Standalone external brief API
-
-The external brief server exposes one synchronous authenticated endpoint that sends a
-standalone writing brief through the Writer–Critic–Editor workflow. This focused
-development/testing command runs in a separate process with its own process-local queue and
-metrics. It does not start Telegram polling or heartbeat, so Telegram heartbeat cannot
-observe its `EXTERNAL` activity.
-
-Provide `GEMINI_API_KEY`, `AGENT_MODEL`, and a non-empty
-`EDITORIAL_EXTERNAL_API_TOKEN` through the process environment. The server defaults to
-`127.0.0.1:8080`; `EDITORIAL_EXTERNAL_API_HOST` and
-`EDITORIAL_EXTERNAL_API_PORT` may override that address.
+Run the development checks:
 
 ```shell
-python scripts/run_external_brief_api.py
+ruff check .
+python -m pytest -ra
 ```
 
-Send JSON with a bearer token and a non-empty idempotency key:
+## Tools and components
 
-```shell
-curl -X POST http://127.0.0.1:8080/brief \
-  -H "Authorization: Bearer placeholder-local-token" \
-  -H "Idempotency-Key: launch-post-1" \
-  -H "Content-Type: application/json" \
-  -d '{"brief":"Write a concise LinkedIn post announcing the launch."}'
+### External libraries and services
+
+| Component | Role |
+|---|---|
+| Telegram Bot API / `python-telegram-bot` | Receives allowlisted Telegram updates, preserves forum-topic identity, sends responses, and manages polling lifecycle. |
+| LangGraph | Defines and executes the conversation graph and editorial subgraph and integrates checkpoint persistence. |
+| Gemini | Model provider behind the provider-neutral Coordinator, Talker, Writer, Critic, Editor, and AdminAgent boundaries. |
+| SQLite LangGraph checkpointer | Stores durable conversation state and LangGraph checkpoint history locally. |
+| pytest | Runs unit, integration, restart, isolation, transport, lifecycle, and failure tests. |
+| Ruff | Performs Python linting and import/style checks. |
+
+### Internal agents and services
+
+| Component | Role |
+|---|---|
+| Coordinator | Classifies each turn as ordinary chat, a new writing task, or revision of the active task. |
+| Talker | Produces ordinary conversational responses. |
+| Writer | Creates a new draft or rewrites from the canonical current draft and revision instructions. |
+| Critic | Independently reviews Writer output and returns `PASS` or `REVISE` with structured feedback. |
+| Editor | Runs only after `REVISE` and produces the edited canonical draft. |
+| `ConversationService` | Thin boundary that validates invocation input, selects the LangGraph thread, invokes the compiled graph, maps output, and sanitizes failures. |
+| Shared runtime queue and worker | Serializes Telegram and heartbeat jobs through one bounded FIFO execution boundary. |
+| Heartbeat | Collects operational queue/worker metrics and submits evaluation through the shared runtime. |
+| AdminAgent | Assesses only operational snapshots under deterministic policy; it cannot access conversation messages, prompts, identities, or drafts. |
+| Tracing | Emits correlation-safe stage and runtime metadata without logging product content or secrets. |
+
+## Architecture
+
+```mermaid
+flowchart TD
+    U["Telegram user"] --> TG["Telegram Bot API"]
+    TG --> IN["Chat-type validation and chat-ID allowlist"]
+    IN --> Q["Shared bounded runtime queue"]
+    Q --> W["Single worker"]
+    W --> CS["Thin ConversationService"]
+    CS --> PG["LangGraph conversation graph"]
+    PG --> C["Coordinator"]
+    C -->|"CHAT"| T["Talker"]
+    C -->|"START_WRITING_TASK or REVISE_TASK"| ES["Editorial subgraph"]
+    ES --> WR["Writer"]
+    WR --> CR["Critic"]
+    CR -->|"PASS"| DONE["Finalize task and response"]
+    CR -->|"REVISE"| E["Editor"]
+    E --> DONE
+    T --> DONE
+    DONE --> TG
+
+    PG <--> DB[("SQLite LangGraph checkpoints")]
+
+    HB["Heartbeat scheduler"] --> Q
+    W --> OS["Operational snapshot only"]
+    OS --> AA["AdminAgent + deterministic policy"]
+    AA --> HDB[("Heartbeat decision database")]
+    ISO["Isolation boundary: no conversation content"] -.-> OS
 ```
 
-A successful response contains only the completed editorial result:
+The parent graph owns conversation history and the active `WritingTask`. The task's
+`working_draft` is the authoritative durable draft. Coordinator decisions, Writer output,
+and editorial results are execution fields that are cleared from the latest completed state,
+although older LangGraph checkpoints can retain them.
 
-```json
-{"status":"completed","result":"The completed editorial copy."}
+## Interaction sequences
+
+### Ordinary chat
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Telegram
+    participant Queue as Runtime queue/worker
+    participant Graph as Conversation graph
+    participant Coordinator
+    participant Talker
+    participant SQLite as SQLite checkpointer
+
+    User->>Telegram: Send allowlisted message
+    Telegram->>Queue: Submit Telegram job
+    Queue->>Graph: Invoke stable thread ID
+    Graph->>SQLite: Load thread state
+    Graph->>Coordinator: Classify turn
+    Coordinator-->>Graph: CHAT
+    Graph->>Talker: Respond with conversation context
+    Talker-->>Graph: Conversational response
+    Graph->>SQLite: Checkpoint completed turn
+    Graph-->>Queue: Assistant message
+    Queue-->>Telegram: Deliver response
+    Telegram-->>User: Talker response
 ```
 
-For `POST /brief`, authentication is checked before request framing, body reading,
-validation, or queue submission. Accepted first-time jobs
-use runtime source `EXTERNAL`, preserving the queue's FIFO and one-in-flight behavior.
-Idempotency state is process-local and protected across concurrent requests: repeating the
-same key and brief shares or returns the original response without another job, while using
-the key with a different brief returns `409`. Accepted workflow failures are cached and are
-not retried automatically. Queue rejections may be retried. All idempotency state resets
-when the server restarts.
+### New writing request — Critic PASS
 
-To demonstrate a cached repeat, run the `curl` command above twice without changing either
-the key or body. Both calls return the same response, and only the first submits an external
-runtime job. Placeholder tokens are examples only; never use them as real credentials.
+```mermaid
+sequenceDiagram
+    actor User
+    participant Telegram
+    participant Queue as Runtime queue/worker
+    participant Graph as Conversation graph
+    participant Coordinator
+    participant Writer
+    participant Critic
+    participant Editor
+    participant SQLite
 
-## Runtime queue
+    User->>Telegram: Request new writing task
+    Telegram->>Queue: Submit job
+    Queue->>Graph: Invoke thread
+    Graph->>Coordinator: Classify request
+    Coordinator-->>Graph: START_WRITING_TASK
+    Graph->>Writer: Create draft
+    Writer-->>Graph: Writer output
+    Graph->>Critic: Review independently
+    Critic-->>Graph: PASS
+    Note over Editor: Editor does not execute
+    Graph->>SQLite: Store active task and canonical Writer draft
+    Graph-->>Telegram: Writer, Critic, and final handoff messages
+    Telegram-->>User: Completed editorial response
+```
 
-One application-owned, bounded FIFO queue is the execution boundary for runtime work.
-Telegram turns currently enter this queue; later webhook and heartbeat producers will use
-the same boundary. One asynchronous worker executes accepted jobs in deterministic order,
-isolates individual failures, and drains accepted work during graceful shutdown. Waiting
-capacity defaults to 100. The queue has no persistence or retries and does not survive a
-process restart. The deliberate trade-off is head-of-line blocking when one LLM workflow
-is slow in exchange for simple, serialized access to in-memory conversation state.
-Queue tracing measures waiting depth immediately after enqueue and after dequeue for
-start/completion events; the currently executing job is not included in that depth.
+### New writing request — Critic REVISE
 
-The Coordinator routes messages to `CHAT`, `START_WRITING_TASK`, or `REVISE_TASK`.
-There is no explicit approval phase: the latest completed writing task remains available
-for later revision, including after intervening chat, until a new writing request replaces
-it. Writer, Critic, and Editor are displayed as a staged Telegram handoff after the complete
-Writer–Critic–optional Editor workflow has finished atomically. This presentation delay is
-not real-time workflow streaming.
+```mermaid
+sequenceDiagram
+    actor User
+    participant Telegram
+    participant Queue as Runtime queue/worker
+    participant Graph as Conversation graph
+    participant Coordinator
+    participant Writer
+    participant Critic
+    participant Editor
+    participant SQLite
 
-### Manual smoke test
+    User->>Telegram: Request new writing task
+    Telegram->>Queue: Submit job
+    Queue->>Graph: Invoke thread
+    Graph->>Coordinator: Classify request
+    Coordinator-->>Graph: START_WRITING_TASK
+    Graph->>Writer: Create draft
+    Writer-->>Graph: Writer output
+    Graph->>Critic: Review independently
+    Critic-->>Graph: REVISE with issues
+    Graph->>Editor: Apply Critic feedback
+    Editor-->>Graph: Edited draft
+    Graph->>SQLite: Store task and edited canonical draft
+    Graph-->>Telegram: Writer, Critic, and Editor messages
+    Telegram-->>User: Completed editorial response
+```
 
-1. Start the bot locally with the command above.
-2. Open the disposable bot in Telegram.
-3. Send `Hello!` and expect one normal conversational response.
-4. Send `Write a short LinkedIn post announcing that Editorial Team is now available as a
-   Telegram bot.` Expect Writer output, a Critic evaluation, and an Editor handoff message.
-5. Send `Make it shorter and less formal.` Expect another normal
-   Writer–Critic–optional Editor cycle using the current working draft.
-6. Send `Looks good, thanks.` Expect a conversational acknowledgement while the latest task
-   remains available for revision.
-7. Stop and restart the process. The prior state should be gone because storage is
-   intentionally in memory.
+### Revision of an existing task
 
-This smoke test is manual and is not performed by the automated test suite.
+```mermaid
+sequenceDiagram
+    actor User
+    participant Telegram
+    participant Queue as Runtime queue/worker
+    participant Graph as Conversation graph
+    participant SQLite
+    participant Coordinator
+    participant Writer
+    participant Critic
+    participant Editor
 
-## Operational decision storage
+    User->>Telegram: Request a change
+    Telegram->>Queue: Submit job with chat/topic identity
+    Queue->>Graph: Invoke existing thread
+    Graph->>SQLite: Recover active task and canonical working_draft
+    Graph->>Coordinator: Classify with conversation context
+    Coordinator-->>Graph: REVISE_TASK with instructions
+    Graph->>Writer: Rewrite using canonical draft and feedback
+    Writer-->>Graph: Revised Writer output
+    Graph->>Critic: Review revised output
+    alt Critic PASS
+        Critic-->>Graph: PASS
+        Note over Editor: Editor does not execute
+    else Critic REVISE
+        Critic-->>Graph: REVISE with issues
+        Graph->>Editor: Apply Critic feedback
+        Editor-->>Graph: Edited draft
+    end
+    Graph->>SQLite: Checkpoint updated task and canonical draft
+    Graph-->>Telegram: Revision response
+    Telegram-->>User: Updated content
+```
 
-SQLite has one narrow role: durable storage of heartbeat/Admin decisions.
-Both `SILENCE` and `NOTIFY` outcomes are stored. `SILENCE` produces no Telegram
-output; `NOTIFY` alerts one configured maintainer destination and records whether
-that notification was sent.
+### Restart recovery
 
-The default local path is `runtime_data/editorial_team.db`, but callers inject the
-database path explicitly. Live asynchronous orchestration calls the synchronous
-repository through explicit `asyncio.to_thread` boundaries.
+```mermaid
+sequenceDiagram
+    actor User
+    participant AppA as Application instance A
+    participant SQLite
+    participant AppB as New application instance B
+    participant Graph as Conversation graph
+    participant Writer
 
-This database stores no user messages, identities, prompts, conversations, writing
-tasks, drafts, Critic reports, or raw model output. It is not queue persistence:
-the runtime queue and normal Telegram conversation state remain in memory and reset
-when the process restarts.
+    User->>AppA: Create and complete writing task
+    AppA->>SQLite: Store thread state and canonical draft
+    AppA->>AppA: Clean shutdown
+    Note over SQLite: close() does not delete checkpoint data
+    User->>AppB: Restart with same DB path and Telegram identity
+    AppB->>Graph: Invoke same LangGraph thread ID
+    Graph->>SQLite: Load prior conversation and active task
+    User->>AppB: Request revision
+    Graph->>Writer: Continue from recovered canonical draft
+    Writer-->>Graph: Revised output
+    Graph->>SQLite: Store updated task checkpoint
+    AppB-->>User: Revision response
+```
 
-### Privileged AdminAgent
+## Checkpoint persistence and local-data safety
 
-AdminAgent is an operational subagent that receives only an `OperationalSnapshot`
-and an immutable threshold policy. It chooses `SILENCE` or `NOTIFY`; application
-code independently applies the same deterministic policy and rejects conflicting
-model output before storing a result in SQLite.
+The conversation checkpointer stores Telegram conversation messages, writing briefs, drafts,
+Critic reports, and active-task state locally. LangGraph also retains historical node
+checkpoints and intermediate write records. Clearing transient fields from the latest state
+does not erase older records: previous drafts, Coordinator decisions, Critic reports, Writer
+output, editorial results, and formatted response fragments may remain recoverable.
 
-The default policy checks conditions in strict priority order: stopped worker,
-three or more failed jobs, queue occupancy at or above 0.8, then system healthy.
-AdminAgent cannot access conversations, user identities, editorial prompts, or
-drafts. It cannot send Telegram messages, write SQLite directly, or modify runtime
-state.
+Closing the application closes the SQLite connection but does not delete stored data.
+Checkpoint pruning and encryption are not implemented. Treat the database as sensitive,
+trusted local data and prevent untrusted users or processes from replacing or modifying it.
+The current serializer uses Python `pickle`; newly created runtime directories and checkpoint
+files receive user-only permissions on POSIX systems where supported.
 
-### Optional live heartbeat
+Restart persistence requires both:
 
-The in-process heartbeat is disabled by default. Enable it with
-`EDITORIAL_HEARTBEAT_ENABLED=true` and configure
-`EDITORIAL_ADMIN_TELEGRAM_CHAT_ID`. The interval defaults to 900 seconds
-(15 minutes) and may be changed with `EDITORIAL_HEARTBEAT_INTERVAL_SECONDS`;
-live configuration rejects intervals below 10 seconds. The injected SQLite path
-defaults to `runtime_data/editorial_team.db` and can be changed with
-`EDITORIAL_HEARTBEAT_DB_PATH`.
+1. the same `EDITORIAL_CHECKPOINT_DB_PATH`; and
+2. the same deterministic Telegram chat/topic identity.
 
-Each interval, the collector records waiting depth and calculates completed and
-failed `TELEGRAM` and `EXTERNAL` job deltas since the previous observation.
-`HEARTBEAT` jobs are excluded from their own observation window. The first
-observation counts relevant jobs since process startup. The heartbeat then joins
-the same bounded FIFO queue as user work, so it cannot interleave with a staged
-editorial workflow.
+SQLite lock waiting is bounded by `EDITORIAL_CHECKPOINT_BUSY_TIMEOUT_SECONDS`, which defaults
+to five seconds. A timeout fails through the sanitized user-facing error boundary and never
+falls back to in-memory state.
 
-The fixed Admin priority remains stopped worker, three or more recent failures,
-queue occupancy of at least 0.8, then healthy. Both outcomes are persisted.
-`SILENCE` sends nothing and remains `notification_sent=false`. `NOTIFY` sends
-deterministic, non-LLM prose to the configured maintainer chat and is marked sent
-only after successful delivery. Delivery or persistence failures are not retried.
-SQLite continues to store no chat ID, identity, message, prompt, or draft data.
+## Optional heartbeat and AdminAgent
 
-Because the scheduled runner depends on the same in-process queue worker,
-complete worker or process loss cannot be independently detected by this path.
-`WORKER_STOPPED` remains supported by policy and injected/forced evaluations; an
-external watchdog would be required for independent loss detection.
+Heartbeat is disabled by default. To enable it, configure:
 
-Inspect recent operational decisions locally:
+```dotenv
+EDITORIAL_HEARTBEAT_ENABLED=true
+EDITORIAL_HEARTBEAT_INTERVAL_SECONDS=900
+EDITORIAL_HEARTBEAT_DB_PATH=runtime_data/editorial_team.db
+EDITORIAL_ADMIN_TELEGRAM_CHAT_ID=123456789
+```
+
+The live interval must be at least 10 seconds. Each heartbeat observes queue and worker
+metrics and enters the same shared runtime queue as Telegram jobs. AdminAgent receives only
+the resulting `OperationalSnapshot` and immutable policy. Application code independently
+validates its `SILENCE` or `NOTIFY` decision. It cannot inspect conversations, user identities,
+prompts, or drafts.
+
+Heartbeat decisions use their own SQLite database. This operational database stores safe
+queue/worker metrics and notification status, not conversation content. Because heartbeat is
+in-process, it cannot independently detect total process loss; that would require an external
+watchdog.
+
+Inspect recent operational decisions with:
 
 ```shell
 sqlite3 runtime_data/editorial_team.db \
@@ -186,26 +364,14 @@ sqlite3 runtime_data/editorial_team.db \
    LIMIT 10;"
 ```
 
-### Heartbeat alert demo
+## Reliability and privacy boundaries
 
-`scripts/demo_heartbeat_notify.py` intentionally sends one real synthetic
-repeated-failures alert through the normal AdminAgent, policy validation,
-SQLite, renderer, and Telegram notifier flow. Normal heartbeat configuration
-must be enabled and valid, and the additional explicit opt-in must normalize
-exactly to `true`:
+Coordinator and Critic request provider-native JSON Schema-constrained output and then pass it
+through strict application parsing and domain validation. Talker, Writer, and Editor return
+plain text. Provider failures, malformed outputs, persistence failures, and delivery failures
+cross sanitized boundaries rather than exposing prompts, drafts, credentials, SQL, or local
+paths.
 
-```shell
-EDITORIAL_HEARTBEAT_DEMO_NOTIFY=true python scripts/demo_heartbeat_notify.py
-```
-
-Warning: this command makes a real model call and sends a real synthetic alert
-to the configured maintainer Telegram chat. It does not start polling or the
-automatic heartbeat scheduler.
-
-## Structured-output reliability
-
-The Coordinator and Critic request provider-native, JSON Schema-constrained output.
-Their responses still pass through the application's strict JSON parser, domain
-validation, and, for Critic issues, grounded-excerpt validation. The Talker, Writer,
-and Editor continue to return plain text. Schema constraints improve formatting
-reliability but do not make semantic agent output infallible.
+The runtime queue is intentionally in-memory and globally serialized. It drains accepted work
+on clean shutdown but does not survive process restart. Completed conversation state survives
+through SQLite checkpoints.

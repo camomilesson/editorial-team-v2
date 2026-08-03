@@ -22,19 +22,19 @@ def test_state_contract_has_required_version_and_invocation_kind() -> None:
         "invocation_kind",
     }
     assert {
-        "prior_conversation",
+        "conversation",
+        "turn_conversation",
         "decision",
         "writing_task",
         "editorial_result",
-        "completed_conversation",
+        "assistant_messages",
     } <= hints.keys()
 
 
-@pytest.mark.parametrize("invocation_kind", ["conversation", "external_brief"])
-def test_version_one_state_is_accepted(invocation_kind: str) -> None:
+def test_version_one_state_is_accepted() -> None:
     state: EditorialGraphStateV1 = {
         "state_version": EDITORIAL_GRAPH_STATE_VERSION,
-        "invocation_kind": invocation_kind,  # type: ignore[typeddict-item]
+        "invocation_kind": "conversation",
     }
 
     validate_graph_state_version(state)

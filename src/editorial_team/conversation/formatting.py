@@ -53,8 +53,6 @@ def format_editor_message(result: EditorialResult) -> str:
     """Render revised output or the deterministic PASS handoff."""
 
     content = (
-        result.working_draft
-        if result.revision_applied
-        else "Working draft approved, see above."
+        result.working_draft if result.revision_applied else "Working draft approved, see above."
     )
     return format_agent_message("🛠️ Editor", content)

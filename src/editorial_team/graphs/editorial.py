@@ -1,4 +1,4 @@
-"""Alternative LangGraph orchestration of one editorial attempt."""
+"""LangGraph orchestration of one Writer-Critic-Editor attempt."""
 
 from __future__ import annotations
 
@@ -7,136 +7,174 @@ from typing import Literal
 from langgraph.graph import END, START, StateGraph
 
 from editorial_team.agents.protocols import Critic, Editor, Writer
-from editorial_team.domain.editorial import CriticReport, CriticVerdict, WritingTask
-from editorial_team.graphs.state import (
-    EditorialGraphStateV1,
-    validate_graph_state_version,
+from editorial_team.contracts.common import require_non_blank
+from editorial_team.domain.editorial import (
+    CriticReport,
+    EditorialResult,
+    WritingTask,
 )
-from editorial_team.workflows.writing import WritingWorkflow, WritingWorkflowError
+from editorial_team.errors import ServiceError
+from editorial_team.graphs.state import EditorialGraphStateV1, validate_graph_state_version
+from editorial_team.tracing import error_category, set_trace_stage, trace_event
 
 EditorialVerdictRoute = Literal["pass", "revise"]
 
 
-def _route_critic_verdict(state: EditorialGraphStateV1) -> EditorialVerdictRoute:
-    """Describe the future Critic verdict branch without invoking an agent."""
+class EditorialGraphError(ServiceError):
+    """A sanitized failure from the editorial graph."""
 
+
+def _route_critic_verdict(state: EditorialGraphStateV1) -> EditorialVerdictRoute:
     report = state.get("critic_report")
-    if report is None:
-        raise ValueError("Editorial graph state has no Critic report")
-    if report.verdict is CriticVerdict.PASS:
-        return "pass"
-    return "revise"
+    if not isinstance(report, CriticReport):
+        raise EditorialGraphError("Critic returned an invalid report")
+    return report.verdict.value
 
 
 class _EditorialNodes:
-    """Node adapters around the existing validated workflow steps."""
-
-    def __init__(self, workflow: WritingWorkflow) -> None:
-        self._workflow = workflow
+    def __init__(self, *, writer: Writer, critic: Critic, editor: Editor) -> None:
+        self._writer = writer
+        self._critic = critic
+        self._editor = editor
 
     def writer(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
-        """Produce and validate exactly one Writer output."""
-
         validate_graph_state_version(state)
-        task = state.get("writing_task")
-        if not isinstance(task, WritingTask):
-            raise WritingWorkflowError("Invalid writing task")
-        return {"writer_output": self._workflow._write(task)}
+        task = self._task(state)
+        set_trace_stage("writer")
+        trace_event("writer_started", stage="writer")
+        try:
+            output = self._writer.write(task)
+        except Exception as exc:
+            trace_event(
+                "writer_failed",
+                stage="writer",
+                outcome="failed",
+                error_category=error_category(exc),
+            )
+            raise EditorialGraphError("Writer failed") from None
+        output = self._text(output, participant="Writer")
+        trace_event("writer_completed", stage="writer", outcome="completed")
+        return {"writer_output": output}
 
     def critic(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
-        """Review and validate the exact Writer output once."""
-
-        task = self._require_task(state)
-        writer_output = self._require_text(state, "writer_output")
-        return {"critic_report": self._workflow._review(task, writer_output)}
+        task = self._task(state)
+        draft = self._required_text(state, "writer_output")
+        set_trace_stage("critic")
+        trace_event("critic_started", stage="critic")
+        try:
+            report = self._critic.review(task, draft)
+        except Exception as exc:
+            trace_event(
+                "critic_failed",
+                stage="critic",
+                outcome="failed",
+                error_category=error_category(exc),
+            )
+            raise EditorialGraphError("Critic failed") from None
+        if not isinstance(report, CriticReport):
+            trace_event(
+                "critic_failed",
+                stage="critic",
+                outcome="failed",
+                error_category="schema_validation_failure",
+            )
+            raise EditorialGraphError("Critic returned an invalid report")
+        try:
+            CriticReport(report.verdict, report.summary, report.issues)
+        except (TypeError, ValueError):
+            trace_event(
+                "critic_failed",
+                stage="critic",
+                outcome="failed",
+                error_category="domain_consistency_failure",
+            )
+            raise EditorialGraphError("Critic returned an invalid report") from None
+        trace_event(
+            "critic_completed", stage="critic", outcome="completed", critic_verdict=report.verdict
+        )
+        return {"critic_report": report}
 
     def editor(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
-        """Revise once using the exact task, draft, and Critic report."""
-
-        task = self._require_task(state)
-        writer_output = self._require_text(state, "writer_output")
-        report = self._require_report(state)
-        return {
-            "working_draft": self._workflow._revise(
-                task,
-                writer_output,
-                report,
+        task = self._task(state)
+        draft = self._required_text(state, "writer_output")
+        report = self._report(state)
+        set_trace_stage("editor")
+        trace_event("editor_started", stage="editor")
+        try:
+            output = self._editor.revise(task, draft, report)
+        except Exception as exc:
+            trace_event(
+                "editor_failed",
+                stage="editor",
+                outcome="failed",
+                error_category=error_category(exc),
             )
-        }
+            raise EditorialGraphError("Editor failed") from None
+        output = self._text(output, participant="Editor")
+        trace_event("editor_completed", stage="editor", outcome="completed")
+        return {"working_draft": output}
 
-    def build_pass_result(
-        self,
-        state: EditorialGraphStateV1,
-    ) -> EditorialGraphStateV1:
-        """Build the same immutable result as the workflow PASS path."""
-
-        writer_output = self._require_text(state, "writer_output")
-        report = self._require_report(state)
+    def build_pass_result(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
+        writer_output = self._required_text(state, "writer_output")
+        report = self._report(state)
         return {
             "working_draft": writer_output,
-            "editorial_result": self._workflow._build_result(
-                writer_output=writer_output,
-                report=report,
-                working_draft=writer_output,
-                revision_applied=False,
-            ),
+            "editorial_result": self._result(writer_output, report, writer_output, False),
         }
 
-    def build_revised_result(
-        self,
-        state: EditorialGraphStateV1,
-    ) -> EditorialGraphStateV1:
-        """Build the same immutable result as the workflow REVISE path."""
-
-        writer_output = self._require_text(state, "writer_output")
-        report = self._require_report(state)
-        working_draft = self._require_text(state, "working_draft")
-        return {
-            "editorial_result": self._workflow._build_result(
-                writer_output=writer_output,
-                report=report,
-                working_draft=working_draft,
-                revision_applied=True,
-            )
-        }
+    def build_revised_result(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
+        writer_output = self._required_text(state, "writer_output")
+        report = self._report(state)
+        working_draft = self._required_text(state, "working_draft")
+        return {"editorial_result": self._result(writer_output, report, working_draft, True)}
 
     @staticmethod
-    def _require_task(state: EditorialGraphStateV1) -> WritingTask:
+    def _task(state: EditorialGraphStateV1) -> WritingTask:
         task = state.get("writing_task")
         if not isinstance(task, WritingTask):
-            raise WritingWorkflowError("Invalid writing task")
+            raise EditorialGraphError("Invalid writing task")
         return task
 
     @staticmethod
-    def _require_text(state: EditorialGraphStateV1, field_name: str) -> str:
-        value = state.get(field_name)  # type: ignore[literal-required]
-        if not isinstance(value, str):
-            raise WritingWorkflowError("Writing workflow produced an invalid result")
-        return value
-
-    @staticmethod
-    def _require_report(state: EditorialGraphStateV1) -> CriticReport:
+    def _report(state: EditorialGraphStateV1) -> CriticReport:
         report = state.get("critic_report")
         if not isinstance(report, CriticReport):
-            raise WritingWorkflowError("Critic returned an invalid report")
+            raise EditorialGraphError("Critic returned an invalid report")
         return report
+
+    @staticmethod
+    def _text(value: object, *, participant: str) -> str:
+        try:
+            return require_non_blank(value, "output")  # type: ignore[arg-type]
+        except ValueError:
+            trace_event(
+                f"{participant.lower()}_failed",
+                stage=participant.lower(),
+                outcome="failed",
+                error_category="blank_response",
+            )
+            raise EditorialGraphError(f"{participant} returned invalid output") from None
+
+    @classmethod
+    def _required_text(cls, state: EditorialGraphStateV1, field: str) -> str:
+        return cls._text(state.get(field), participant="Writing workflow")  # type: ignore[literal-required]
+
+    @staticmethod
+    def _result(
+        writer_output: str, report: CriticReport, working_draft: str, revised: bool
+    ) -> EditorialResult:
+        try:
+            return EditorialResult(writer_output, report, working_draft, revised)
+        except (TypeError, ValueError):
+            raise EditorialGraphError("Writing workflow produced an invalid result") from None
 
 
 def build_editorial_subgraph(
-    *,
-    writer: Writer,
-    critic: Critic,
-    editor: Editor,
+    *, writer: Writer, critic: Critic, editor: Editor
 ) -> StateGraph[EditorialGraphStateV1]:
-    """Build the disconnected Writer-Critic-Editor alternative.
+    """Build the sole production Writer-Critic-optional Editor workflow."""
 
-    The graph reuses the current workflow's validated step implementation but is
-    not connected to application composition or any production request path.
-    """
-
-    nodes = _EditorialNodes(
-        WritingWorkflow(writer=writer, critic=critic, editor=editor)
-    )
+    nodes = _EditorialNodes(writer=writer, critic=critic, editor=editor)
     graph = StateGraph(EditorialGraphStateV1)
     graph.add_node("writer", nodes.writer)
     graph.add_node("critic", nodes.critic)
@@ -146,12 +184,7 @@ def build_editorial_subgraph(
     graph.add_edge(START, "writer")
     graph.add_edge("writer", "critic")
     graph.add_conditional_edges(
-        "critic",
-        _route_critic_verdict,
-        {
-            "pass": "build_pass_result",
-            "revise": "editor",
-        },
+        "critic", _route_critic_verdict, {"pass": "build_pass_result", "revise": "editor"}
     )
     graph.add_edge("editor", "build_revised_result")
     graph.add_edge("build_pass_result", END)

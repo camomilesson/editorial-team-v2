@@ -24,6 +24,7 @@ from editorial_team.interfaces.telegram import (
 from editorial_team.runtime import QueueCapacityError, RuntimeJobSource, RuntimeQueue
 
 NOW = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
+ALLOWED = frozenset({123, -100, -200})
 
 
 def assistant(content: str, number: int = 1) -> Message:
@@ -45,6 +46,7 @@ class FakeChat:
 @dataclass
 class FakeTelegramMessage:
     text: object
+    message_thread_id: int | None = None
 
 
 @dataclass
@@ -129,9 +131,13 @@ def test_conversation_identifier_is_stable_and_opaque() -> None:
     assert conversation_id_for_chat(123) == "telegram-chat-123"
     assert conversation_id_for_chat(123) == conversation_id_for_chat(123)
     assert conversation_id_for_chat(-456) == "telegram-chat-n456"
+    assert conversation_id_for_chat(-456, 7) == "telegram-chat-n456-thread-7"
+    assert conversation_id_for_chat(-456, 8) != conversation_id_for_chat(-456, 7)
 
     with pytest.raises(ValueError):
         conversation_id_for_chat(True)
+    with pytest.raises(ValueError):
+        conversation_id_for_chat(123, True)
 
 
 @pytest.mark.parametrize("delay", [-1, math.nan, math.inf, True, "slow"])
@@ -140,6 +146,7 @@ def test_handoff_delay_must_be_a_non_negative_finite_number(delay: object) -> No
         TelegramAdapter(
             RecordingService(),
             ImmediateRuntimeQueue(),  # type: ignore[arg-type]
+            allowed_chat_ids=ALLOWED,
             handoff_delay=delay,  # type: ignore[arg-type]
         )
 
@@ -158,6 +165,7 @@ def test_three_agent_messages_are_staged_in_order() -> None:
     adapter = TelegramAdapter(  # type: ignore[arg-type]
         service,
         runtime_queue,
+        allowed_chat_ids=ALLOWED,
         handoff_delay=0.25,
         sleeper=sleeper,
     )
@@ -194,6 +202,7 @@ def test_one_talker_message_has_no_handoff_delay() -> None:
     adapter = TelegramAdapter(  # type: ignore[arg-type]
         service,
         ImmediateRuntimeQueue(),
+        allowed_chat_ids=ALLOWED,
         sleeper=sleeper,
     )
 
@@ -207,7 +216,9 @@ def test_one_talker_message_has_no_handoff_delay() -> None:
 def test_queue_capacity_rejection_sends_only_generic_busy_response() -> None:
     service = RecordingService((assistant("must not run"),))
     runtime_queue = RejectingRuntimeQueue()
-    adapter = TelegramAdapter(service, runtime_queue)  # type: ignore[arg-type]
+    adapter = TelegramAdapter(  # type: ignore[arg-type]
+        service, runtime_queue, allowed_chat_ids=ALLOWED
+    )
     ctx = context()
 
     asyncio.run(adapter.handle_text(private_update("PRIVATE USER TEXT"), ctx))  # type: ignore[arg-type]
@@ -219,7 +230,9 @@ def test_queue_capacity_rejection_sends_only_generic_busy_response() -> None:
 
 def test_adapter_lifecycle_starts_and_closes_injected_queue() -> None:
     runtime_queue = ImmediateRuntimeQueue()
-    adapter = TelegramAdapter(RecordingService(), runtime_queue)  # type: ignore[arg-type]
+    adapter = TelegramAdapter(  # type: ignore[arg-type]
+        RecordingService(), runtime_queue, allowed_chat_ids=ALLOWED
+    )
     application = SimpleNamespace()
 
     asyncio.run(adapter.start_runtime(application))  # type: ignore[arg-type]
@@ -236,6 +249,7 @@ def test_chunks_preserve_order_across_application_messages() -> None:
     adapter = TelegramAdapter(  # type: ignore[arg-type]
         service,
         ImmediateRuntimeQueue(),
+        allowed_chat_ids=ALLOWED,
         sleeper=sleeper,
     )
 
@@ -260,9 +274,10 @@ def test_chunks_preserve_order_across_application_messages() -> None:
         FakeUpdate(effective_chat=FakeChat(), effective_message=None),
         private_update(None),
         FakeUpdate(
-            effective_chat=FakeChat(type=ChatType.GROUP),
+            effective_chat=FakeChat(type=ChatType.CHANNEL),
             effective_message=FakeTelegramMessage("Hello"),
         ),
+        private_update("Hello", chat_id=999),
     ],
 )
 def test_unsupported_updates_are_ignored(update: FakeUpdate) -> None:
@@ -270,6 +285,7 @@ def test_unsupported_updates_are_ignored(update: FakeUpdate) -> None:
     adapter = TelegramAdapter(  # type: ignore[arg-type]
         service,
         ImmediateRuntimeQueue(),
+        allowed_chat_ids=ALLOWED,
         handoff_delay=0,
     )
     ctx = context()
@@ -278,6 +294,89 @@ def test_unsupported_updates_are_ignored(update: FakeUpdate) -> None:
 
     assert service.calls == []
     assert ctx.bot.sent == []
+
+
+@pytest.mark.parametrize("chat_type", [ChatType.PRIVATE, ChatType.GROUP, ChatType.SUPERGROUP])
+def test_allowlisted_supported_chat_types_enter_shared_queue(chat_type: str) -> None:
+    chat_id = 123 if chat_type == ChatType.PRIVATE else -100
+    service = RecordingService((assistant("Talker response"),))
+    queue = ImmediateRuntimeQueue()
+    adapter = TelegramAdapter(  # type: ignore[arg-type]
+        service, queue, allowed_chat_ids=ALLOWED, handoff_delay=0
+    )
+    update = FakeUpdate(
+        effective_chat=FakeChat(chat_id, chat_type),
+        effective_message=FakeTelegramMessage("Hello"),
+    )
+
+    asyncio.run(adapter.handle_text(update, context()))  # type: ignore[arg-type]
+
+    assert service.calls == [(conversation_id_for_chat(chat_id), "Hello")]
+    assert len(queue.submissions) == 1
+    assert queue.submissions[0]["source"] is RuntimeJobSource.TELEGRAM
+
+
+def test_topics_use_isolated_ids_and_replies_return_to_originating_topic() -> None:
+    service = RecordingService((assistant("Topic response"),))
+    queue = ImmediateRuntimeQueue()
+    adapter = TelegramAdapter(  # type: ignore[arg-type]
+        service, queue, allowed_chat_ids=ALLOWED, handoff_delay=0
+    )
+    ctx = context()
+
+    for topic in (7, 8):
+        update = FakeUpdate(
+            effective_chat=FakeChat(-100, ChatType.SUPERGROUP),
+            effective_message=FakeTelegramMessage("Hello", message_thread_id=topic),
+        )
+        asyncio.run(adapter.handle_text(update, ctx))  # type: ignore[arg-type]
+
+    assert service.calls == [
+        ("telegram-chat-n100-thread-7", "Hello"),
+        ("telegram-chat-n100-thread-8", "Hello"),
+    ]
+    assert [item["message_thread_id"] for item in ctx.bot.sent] == [7, 8]
+    assert len(queue.submissions) == 2
+
+
+def test_two_groups_and_non_topic_supergroup_messages_use_isolated_group_ids() -> None:
+    service = RecordingService((assistant("Group response"),))
+    queue = ImmediateRuntimeQueue()
+    adapter = TelegramAdapter(  # type: ignore[arg-type]
+        service, queue, allowed_chat_ids=ALLOWED, handoff_delay=0
+    )
+
+    for chat_id, chat_type in ((-100, ChatType.GROUP), (-200, ChatType.SUPERGROUP)):
+        update = FakeUpdate(
+            effective_chat=FakeChat(chat_id, chat_type),
+            effective_message=FakeTelegramMessage("Hello", message_thread_id=None),
+        )
+        asyncio.run(adapter.handle_text(update, context()))  # type: ignore[arg-type]
+
+    assert service.calls == [
+        ("telegram-chat-n100", "Hello"),
+        ("telegram-chat-n200", "Hello"),
+    ]
+    assert len(queue.submissions) == 2
+
+
+@pytest.mark.parametrize(
+    ("chat_id", "chat_type"),
+    [(999, ChatType.PRIVATE), (-999, ChatType.GROUP), (-999, ChatType.SUPERGROUP)],
+)
+def test_non_allowlisted_chats_are_rejected(chat_id: int, chat_type: str) -> None:
+    service = RecordingService((assistant("must not run"),))
+    queue = ImmediateRuntimeQueue()
+    adapter = TelegramAdapter(service, queue, allowed_chat_ids=ALLOWED)  # type: ignore[arg-type]
+    update = FakeUpdate(
+        effective_chat=FakeChat(chat_id, chat_type),
+        effective_message=FakeTelegramMessage("Hello"),
+    )
+
+    asyncio.run(adapter.handle_text(update, context()))  # type: ignore[arg-type]
+
+    assert service.calls == []
+    assert queue.submissions == []
 
 
 def test_service_failure_sends_and_logs_only_sanitized_details(
@@ -292,6 +391,7 @@ def test_service_failure_sends_and_logs_only_sanitized_details(
     adapter = TelegramAdapter(  # type: ignore[arg-type]
         FailingService(),
         ImmediateRuntimeQueue(),
+        allowed_chat_ids=ALLOWED,
         handoff_delay=0,
     )
     ctx = context()
@@ -309,7 +409,9 @@ def test_service_failure_sends_and_logs_only_sanitized_details(
 
 def test_start_is_platform_onboarding_only() -> None:
     service = RecordingService()
-    adapter = TelegramAdapter(service, ImmediateRuntimeQueue())  # type: ignore[arg-type]
+    adapter = TelegramAdapter(  # type: ignore[arg-type]
+        service, ImmediateRuntimeQueue(), allowed_chat_ids=ALLOWED
+    )
     ctx = context()
 
     asyncio.run(adapter.start(private_update("/start"), ctx))  # type: ignore[arg-type]
@@ -382,6 +484,7 @@ def test_two_updates_are_serialized_in_processing_order() -> None:
         adapter = TelegramAdapter(  # type: ignore[arg-type]
             service,
             runtime_queue,
+            allowed_chat_ids=ALLOWED,
             handoff_delay=0,
         )
         ctx = context()

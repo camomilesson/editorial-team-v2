@@ -50,7 +50,6 @@ class _SyntheticMetricsSource:
             capacity=100,
             sources=(
                 RuntimeSourceStats(RuntimeJobSource.TELEGRAM, 0, 3, None),
-                RuntimeSourceStats(RuntimeJobSource.EXTERNAL, 0, 0, None),
                 RuntimeSourceStats(RuntimeJobSource.HEARTBEAT, 0, 0, None),
             ),
         )

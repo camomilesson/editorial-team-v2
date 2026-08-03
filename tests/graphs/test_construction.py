@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from editorial_team.domain.conversation import ConversationState
 from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
 from editorial_team.graphs import build_editorial_subgraph, build_parent_graph
 
@@ -42,16 +41,6 @@ class UnusedTalker:
         raise AssertionError("construction must not invoke Talker")
 
 
-class EmptyStore:
-    def load(self, conversation_id: str) -> ConversationState | None:
-        del conversation_id
-        return None
-
-    def save(self, state: ConversationState) -> None:
-        del state
-        raise AssertionError("parent scaffold must not save state")
-
-
 def parent_builder(
     decision: CoordinatorDecision | None = None,
 ) -> object:
@@ -61,7 +50,6 @@ def parent_builder(
             or CoordinatorDecision(CoordinatorRoute.CHAT, 1.0)
         ),
         talker=UnusedTalker(),
-        store=EmptyStore(),
         identifier_generator=lambda: "message-1",
         clock=lambda: datetime.now(UTC),
         writer=UnusedWriter(),
@@ -149,4 +137,3 @@ def test_editorial_subgraph_preserves_planned_topology() -> None:
         ("build_pass_result", "__end__", False),
         ("build_revised_result", "__end__", False),
     }
-

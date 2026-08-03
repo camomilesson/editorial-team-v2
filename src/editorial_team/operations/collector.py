@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from editorial_team.operations.models import OperationalSnapshot
 from editorial_team.runtime import RuntimeJobSource, RuntimeQueue
 
-_PRODUCT_SOURCES = (RuntimeJobSource.TELEGRAM, RuntimeJobSource.EXTERNAL)
+_PRODUCT_SOURCES = (RuntimeJobSource.TELEGRAM,)
 
 
 class OperationalSnapshotCollector:

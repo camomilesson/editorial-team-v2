@@ -11,8 +11,6 @@ from enum import Enum
 from typing import Any
 from uuid import uuid4
 
-from editorial_team.agents.errors import AgentError
-
 trace_logger = logging.getLogger("editorial_team.live_trace")
 
 _SAFE_VALUE = re.compile(r"^[A-Za-z0-9_.:-]+$")
@@ -96,7 +94,9 @@ def trace_runtime_event(event: str, *, correlation_id: str, **fields: Any) -> No
 def error_category(error: BaseException) -> str:
     """Return a sanitized category without exposing exception text."""
 
-    if isinstance(error, AgentError):
+    if type(error).__name__ == "AgentError" and type(error).__module__ == (
+        "editorial_team.agents.errors"
+    ):
         categories = {
             "Coordinator model call failed": "provider_model_failure",
             "Coordinator returned invalid output": "blank_response",

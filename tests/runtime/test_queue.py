@@ -291,7 +291,7 @@ def test_metrics_track_lifecycle_outcomes_and_sources_without_payloads() -> None
                 operation=lambda: asyncio.sleep(0, result="USER-PAYLOAD-SECRET"),
             ),
             queue.submit(
-                source=RuntimeJobSource.EXTERNAL,
+                source=RuntimeJobSource.HEARTBEAT,
                 correlation_id="metrics-failure",
                 operation=fail,
             ),
@@ -302,13 +302,11 @@ def test_metrics_track_lifecycle_outcomes_and_sources_without_payloads() -> None
 
         stats = queue.stats()
         telegram = stats.for_source(RuntimeJobSource.TELEGRAM)
-        external = stats.for_source(RuntimeJobSource.EXTERNAL)
         heartbeat = stats.for_source(RuntimeJobSource.HEARTBEAT)
         assert (telegram.completed_jobs, telegram.failed_jobs) == (1, 0)
         assert telegram.last_success_at == now
-        assert (external.completed_jobs, external.failed_jobs) == (0, 1)
-        assert external.last_success_at is None
-        assert (heartbeat.completed_jobs, heartbeat.failed_jobs) == (0, 0)
+        assert (heartbeat.completed_jobs, heartbeat.failed_jobs) == (0, 1)
+        assert heartbeat.last_success_at is None
         assert "USER-PAYLOAD-SECRET" not in repr(stats)
         assert "PAYLOAD-EXCEPTION-SECRET" not in repr(stats)
 
@@ -339,7 +337,7 @@ def test_rejected_job_does_not_change_outcome_counters_or_waiting_behavior() -> 
         await started.wait()
         second = asyncio.create_task(
             queue.submit(
-                source=RuntimeJobSource.EXTERNAL,
+                source=RuntimeJobSource.TELEGRAM,
                 correlation_id="metrics-waiting",
                 operation=lambda: asyncio.sleep(0),
             )
