@@ -95,6 +95,7 @@ def test_parent_graph_preserves_planned_topology() -> None:
         ("coordinator_agent", "talker", True),
         ("coordinator_agent", "prepare_new_task", True),
         ("coordinator_agent", "prepare_revision", True),
+        ("coordinator_agent", "finalize_turn", True),
         ("coordinator_tools", "coordinator_agent", False),
         ("talker", "finalize_turn", False),
         ("prepare_new_task", "editorial_subgraph", False),

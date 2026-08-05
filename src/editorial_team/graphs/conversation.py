@@ -31,13 +31,16 @@ from editorial_team.contracts.identity import validate_identifier
 from editorial_team.conversation.formatting import (
     format_critic_report,
     format_editor_message,
+    format_retrieved_draft,
     format_talker_message,
     format_writer_message,
 )
 from editorial_team.conversation.protocols import Coordinator, Talker
 from editorial_team.domain.conversation import ConversationState, Message, MessageRole
 from editorial_team.domain.editorial import (
+    EditorialOperation,
     EditorialResult,
+    EditorialRunContext,
     WritingBrief,
     WritingTask,
     WritingTaskStatus,
@@ -55,7 +58,13 @@ from editorial_team.tracing import (
 
 IdentifierGenerator = Callable[[], str]
 UtcClock = Callable[[], datetime]
-ParentRoute = Literal["tools", "chat", "start_writing_task", "revise_task"]
+ParentRoute = Literal[
+    "tools",
+    "chat",
+    "start_writing_task",
+    "revise_task",
+    "show_retrieved_draft",
+]
 MAX_COORDINATOR_TOOL_ROUNDS = 6
 
 
@@ -115,6 +124,9 @@ class _ConversationNodes:
             "decision": None,
             "talker_response": None,
             "writing_task": None,
+            "editorial_run_context": None,
+            "writer_run_id": None,
+            "critic_run_id": None,
             "writer_output": None,
             "critic_report": None,
             "working_draft": None,
@@ -195,9 +207,18 @@ class _ConversationNodes:
             )
         if (
             isinstance(retrieved, RetrievedDraft)
-            and decision.route is not CoordinatorRoute.START_WRITING_TASK
+            and decision.route
+            not in {
+                CoordinatorRoute.START_WRITING_TASK,
+                CoordinatorRoute.SHOW_RETRIEVED_DRAFT,
+            }
         ):
             raise ConversationGraphError("Retrieved draft requires a new writing task")
+        if (
+            decision.route is CoordinatorRoute.SHOW_RETRIEVED_DRAFT
+            and not isinstance(retrieved, RetrievedDraft)
+        ):
+            raise ConversationGraphError("Retrieved draft is required for display")
         trace_event("route_started", route=decision.route)
         return {
             "decision": decision,
@@ -330,33 +351,57 @@ class _ConversationNodes:
         decision = self._decision(state)
         if decision.task_input is None:
             raise ConversationGraphError("Writing task input is invalid")
-        conversation, _ = self._turn(state)
+        conversation, user_message = self._turn(state)
         now = self._timestamp()
         task_id = self._identifier("task")
         retrieved = state.get("retrieved_draft")
         if state.get("coordinator_tool_steps", 0) and not isinstance(retrieved, RetrievedDraft):
             raise ConversationGraphError("A complete historical draft was not retrieved")
-        return {
-            "writing_task": WritingTask(
-                task_id,
-                conversation.conversation_id,
-                WritingBrief(decision.task_input),
-                WritingTaskStatus.CREATED,
-                now,
-                now,
-                None if retrieved is None else retrieved.content,
+        historical = isinstance(retrieved, RetrievedDraft)
+        current_instruction = user_message.content if historical else decision.task_input
+        task = WritingTask(
+            task_id,
+            conversation.conversation_id,
+            (
+                WritingBrief(retrieved.user_request, (current_instruction,))
+                if historical
+                else WritingBrief(decision.task_input)
             ),
-        }
+            WritingTaskStatus.CREATED,
+            now,
+            now,
+            None if retrieved is None else retrieved.content,
+        )
+        context = EditorialRunContext(
+            turn_id=user_message.id,
+            operation=(
+                EditorialOperation.HISTORICAL_TRANSFORMATION
+                if historical
+                else EditorialOperation.NEW_TASK
+            ),
+            task=task,
+            current_instruction=current_instruction,
+            retrieved_artifact_id=(None if retrieved is None else retrieved.artifact_id),
+        )
+        return {"writing_task": task, "editorial_run_context": context}
 
     def prepare_revision(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
         set_trace_stage("revision_workflow")
         trace_event("revision_workflow_started", stage="revision_workflow")
-        conversation, _ = self._turn(state)
+        conversation, user_message = self._turn(state)
         task = conversation.active_task
         if (
             task is None
-            or task.status not in {WritingTaskStatus.REVIEWED, WritingTaskStatus.REVISED}
-            or task.critic_report is None
+            or task.status
+            not in {
+                WritingTaskStatus.REVIEWED,
+                WritingTaskStatus.REVISED,
+                WritingTaskStatus.RETRIEVED,
+            }
+            or (
+                task.status is not WritingTaskStatus.RETRIEVED
+                and task.critic_report is None
+            )
             or task.working_draft is None
         ):
             raise ConversationGraphError("No writing task is available for revision")
@@ -369,13 +414,20 @@ class _ConversationNodes:
                 task.brief,
                 instructions=(*task.brief.instructions, decision.revision_instructions),
             )
+            prepared = replace(
+                task,
+                id=self._identifier("task"),
+                brief=brief,
+                created_at=now,
+                updated_at=now,
+            )
             return {
-                "writing_task": replace(
-                    task,
-                    id=self._identifier("task"),
-                    brief=brief,
-                    created_at=now,
-                    updated_at=now,
+                "writing_task": prepared,
+                "editorial_run_context": EditorialRunContext(
+                    turn_id=user_message.id,
+                    operation=EditorialOperation.ACTIVE_REVISION,
+                    task=prepared,
+                    current_instruction=decision.revision_instructions,
                 ),
             }
         except (TypeError, ValueError):
@@ -400,14 +452,24 @@ class _ConversationNodes:
             "critic_report": result.critic_report,
             "working_draft": result.working_draft,
             "editorial_result": result,
+            "writer_run_id": output.get("writer_run_id"),
+            "critic_run_id": output.get("critic_run_id"),
         }
 
     def finalize_task(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
         conversation, _ = self._turn(state)
         decision = self._decision(state)
         task = state.get("writing_task")
+        context = state.get("editorial_run_context")
         result = state.get("editorial_result")
-        if not isinstance(task, WritingTask) or not isinstance(result, EditorialResult):
+        if (
+            not isinstance(task, WritingTask)
+            or not isinstance(context, EditorialRunContext)
+            or context.task != task
+            or state.get("writer_run_id") != context.run_id
+            or state.get("critic_run_id") != context.run_id
+            or not isinstance(result, EditorialResult)
+        ):
             raise ConversationGraphError("Writing workflow returned an invalid result")
         status = (
             WritingTaskStatus.REVISED if result.revision_applied else WritingTaskStatus.REVIEWED
@@ -452,11 +514,11 @@ class _ConversationNodes:
         conversation, _ = self._turn(state)
         result = state.get("editorial_result")
         task = state.get("writing_task")
-        decision = self._decision(state)
+        context = state.get("editorial_run_context")
         user_request = (
-            decision.task_input
-            if decision.route is CoordinatorRoute.START_WRITING_TASK
-            else decision.revision_instructions
+            context.current_instruction
+            if isinstance(context, EditorialRunContext)
+            else None
         )
         if (
             not isinstance(result, EditorialResult)
@@ -516,6 +578,25 @@ class _ConversationNodes:
             if not isinstance(response, str):
                 raise ConversationGraphError("Talker returned an invalid response")
             contents = (format_talker_message(response),)
+        elif decision.route is CoordinatorRoute.SHOW_RETRIEVED_DRAFT:
+            retrieved = state.get("retrieved_draft")
+            if not isinstance(retrieved, RetrievedDraft):
+                raise ConversationGraphError("Retrieved draft is required for display")
+            now = self._timestamp()
+            try:
+                active_task = WritingTask(
+                    self._identifier("task"),
+                    conversation.conversation_id,
+                    WritingBrief(retrieved.user_request),
+                    WritingTaskStatus.RETRIEVED,
+                    now,
+                    now,
+                    retrieved.content,
+                )
+            except (TypeError, ValueError):
+                raise ConversationGraphError("Retrieved draft activation failed") from None
+            conversation = replace(conversation, active_task=active_task)
+            contents = (format_retrieved_draft(retrieved.content),)
         else:
             result = state.get("editorial_result")
             if not isinstance(result, EditorialResult):
@@ -544,6 +625,9 @@ class _ConversationNodes:
             "decision": None,
             "talker_response": None,
             "writing_task": None,
+            "editorial_run_context": None,
+            "writer_run_id": None,
+            "critic_run_id": None,
             "writer_output": None,
             "critic_report": None,
             "working_draft": None,
@@ -710,6 +794,7 @@ def build_parent_graph(
             "chat": "talker",
             "start_writing_task": "prepare_new_task",
             "revise_task": "prepare_revision",
+            "show_retrieved_draft": "finalize_turn",
         },
     )
     graph.add_edge("coordinator_tools", "coordinator_agent")

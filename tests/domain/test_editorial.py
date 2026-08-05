@@ -93,6 +93,7 @@ def test_constructs_every_editorial_model() -> None:
         "drafted",
         "reviewed",
         "revised",
+        "retrieved",
     }
 
 
@@ -127,6 +128,7 @@ def test_present_working_draft_must_be_nonblank_text() -> None:
         WritingTaskStatus.DRAFTED,
         WritingTaskStatus.REVIEWED,
         WritingTaskStatus.REVISED,
+        WritingTaskStatus.RETRIEVED,
     ],
 )
 def test_produced_text_statuses_require_working_draft(status: WritingTaskStatus) -> None:

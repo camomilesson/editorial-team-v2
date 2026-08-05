@@ -119,7 +119,12 @@ def test_retrieval_prompt_contrasts_active_and_historical_work_with_bounded_draf
     assert "explicit historical reference takes precedence over the active task" in prompt
     assert "Once you call search_corpus in a turn, never finish with revise_task" in prompt
     assert "prefer_recent=true" in prompt
-    assert "never copy, rewrite, summarize, or embed retrieved" in prompt
+    assert "Never copy, rewrite, summarize, or embed" in prompt
+    assert "do not generate proposed replacement prose" in prompt
+    assert "show_retrieved_draft" in prompt
+    assert "inspection verbs do not imply editing" in prompt
+    assert "Active task apples + user 'Make the sun" in prompt
+    assert "imperative word 'make' does not override the named historical subject" in prompt
     assert '"original_request": "Write a formal Skyrim dragons post"' in prompt
     assert "S" * 1200 in prompt
     assert "S" * 1201 not in prompt

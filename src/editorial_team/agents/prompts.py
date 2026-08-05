@@ -7,7 +7,7 @@ from typing import Any
 
 from editorial_team.contracts.common import timestamp_to_json
 from editorial_team.domain.conversation import ConversationState, Message
-from editorial_team.domain.editorial import CriticReport, WritingTask
+from editorial_team.domain.editorial import CriticReport, EditorialRunContext, WritingTask
 from editorial_team.domain.routing import TalkerContext
 from editorial_team.operations.models import OperationalSnapshot
 from editorial_team.operations.policy import AdminPolicy
@@ -119,16 +119,39 @@ def retrieval_coordinator_prompt(
             "and a bounded talker_context containing reason, candidate_summaries, and a concise "
             "recommended_question. Once you call search_corpus in a turn, never finish with "
             "revise_task and never fall back to the active draft. A successfully retrieved "
-            "historical draft must finish as start_writing_task using the user's current editing "
-            "instruction as task_input. For this historical transition, task_input must describe "
-            "only the user's requested edit; never copy, rewrite, summarize, or embed retrieved "
-            "draft content in task_input because the complete retrieved artifact separately "
-            "initializes working_draft. If search or get_draft yields no safe complete selection, "
-            "finish with chat clarification. Contrastive examples: Active task Skyrim dragons + "
+            "historical draft with a transformation instruction must finish as "
+            "start_writing_task using the user's current editing instruction as task_input. A "
+            "request only to show, open, retrieve, pull up, or see the loaded draft must finish "
+            "as show_retrieved_draft; those inspection verbs do not imply editing. For a "
+            "successful show_retrieved_draft, the displayed draft becomes the sole current "
+            "active task, so a later unqualified revision applies to it. Ordinary chat, no "
+            "match, ambiguity, and failed retrieval do not change the active task. For a "
+            "historical transformation, task_input must describe "
+            "only the user's requested edit. Copy the new_user_message as the instruction; do "
+            "not generate proposed replacement prose. Never copy, rewrite, summarize, or embed "
+            "retrieved draft content in task_input because the complete retrieved artifact "
+            "separately initializes working_draft. If search or get_draft yields no safe complete "
+            "selection, "
+            "finish with chat clarification. Both historical final routes require an explicit "
+            "successful get_draft; search excerpts alone are insufficient. Contrastive examples: "
+            "Active task Skyrim dragons + "
             "user 'Add more emojis.' means revise_task using Skyrim, without retrieval. Active "
-            "task Skyrim dragons + user 'Remember the Aurora post and add more emojis.' means "
-            "search_corpus for Aurora, explicit get_draft, then start_writing_task from retrieved "
-            "Aurora. A direct revision of the active task remains revise_task. Resolve calendar "
+            "task Skyrim dragons + user 'Pull up the latest Aurora draft.' means search_corpus "
+            "for Aurora with prefer_recent=true, explicit get_draft, then "
+            "show_retrieved_draft. Active task Skyrim dragons + user 'Pull up the latest Aurora "
+            "draft and add more emojis.' means search_corpus for Aurora with prefer_recent=true, "
+            "explicit get_draft, then start_writing_task from retrieved Aurora. A direct revision "
+            "of the active task remains revise_task. Active task apples + user 'Make the sun "
+            "draft shorter.' identifies different historical work and therefore means "
+            "search_corpus for sun, explicit get_draft, then start_writing_task; the imperative "
+            "word 'make' does not override the named historical subject. "
+            "Another state contrast: active bees + user 'Make it shorter.' means revise_task "
+            "on bees. Active bees + user 'Pull up the latest dragons tweet.' means search, "
+            "get, then show_retrieved_draft, after which dragons is active and 'Make it "
+            "longer.' means revise_task on dragons. User 'Make the previous bees post shorter.' "
+            "then means search and get bees followed by start_writing_task whose task_input is "
+            "that user instruction, not a proposed shortened bees post. "
+            "Resolve calendar "
             "language in the "
             "supplied local timezone before converting inclusive bounds to UTC. Last week is the "
             "previous Monday through Sunday; past week or last seven days is the trailing "
@@ -143,9 +166,13 @@ def retrieval_coordinator_prompt(
             "whose candidate_summaries is an array of strings, and whose "
             "recommended_question is a non-empty string; start_writing_task has a non-empty "
             "task_input and both revision_instructions=null and talker_context=null; "
+            "after historical get_draft, task_input is the user's edit instruction, never your "
+            "own attempted edited draft; "
             "revise_task has a non-empty revision_instructions and both task_input=null and "
-            "talker_context=null. Never use talker_context for a greeting explanation, routing "
-            "rationale, or general conversation metadata. Use JSON null, not an empty string, "
+            "talker_context=null; show_retrieved_draft has task_input=null, "
+            "revision_instructions=null, and talker_context=null. Never use talker_context for "
+            "a greeting explanation, routing rationale, or general conversation metadata. Use "
+            "JSON null, not an empty string, "
             "for every absent route-specific value."
         ),
         context=context,
@@ -193,15 +220,19 @@ def talker_prompt(
     )
 
 
-def writer_prompt(task: WritingTask) -> str:
+def writer_prompt(run_context: EditorialRunContext) -> str:
     """Build a draft-generation prompt."""
 
-    context = _writing_context(task)
+    context = _editorial_run_prompt_context(run_context)
     return _prompt(
         instructions=(
             "Return only the draft text. If current_working_draft is null, create a new draft "
             "for the original request. Otherwise revise or rewrite that current text according "
-            "to all accumulated instructions while preserving unaffected relevant content. "
+            "to current_instruction while preserving unaffected relevant content. "
+            "For a transformation, source_request describes the input draft's provenance; it "
+            "is not an instruction to repeat. The current instruction supersedes older "
+            "requirements that directly conflict on the same dimension, such as longer versus "
+            "shorter or formal versus casual. Apply compatible prior requirements. "
             "Do not critique the result or mention agents, workflow state, JSON, or "
             "implementation details."
         ),
@@ -209,30 +240,76 @@ def writer_prompt(task: WritingTask) -> str:
     )
 
 
-def critic_prompt(task: WritingTask, draft: str) -> str:
+def critic_prompt(run_context: EditorialRunContext, draft: str) -> str:
     """Build a structured exact-draft review prompt."""
 
-    context = {**_writing_context(task), "draft_to_review": draft}
+    task = run_context.task
+    input_draft = task.working_draft
+    input_words = _word_count(input_draft)
+    candidate_words = _word_count(draft)
+    context = {
+        "SOURCE REQUEST": task.brief.original_request,
+        "CURRENT TRANSFORMATION": run_context.current_instruction,
+        "ACCUMULATED REQUIREMENTS": _prior_requirements(run_context),
+        "INPUT DRAFT": input_draft,
+        "CANDIDATE DRAFT": draft,
+        "TRANSFORMATION COMPARISON": {
+            "input_character_count": 0 if input_draft is None else len(input_draft),
+            "candidate_character_count": len(draft),
+            "input_word_count": input_words,
+            "candidate_word_count": candidate_words,
+            "exactly_unchanged": input_draft == draft,
+            "candidate_is_shorter": candidate_words < input_words,
+            "word_reduction": input_words - candidate_words,
+            "word_reduction_ratio": (
+                0.0 if input_words == 0 else (input_words - candidate_words) / input_words
+            ),
+        },
+    }
     return _prompt(
         instructions=(
-            "Review exactly draft_to_review against the original request and accumulated "
-            "instructions. Distinguish requested wording from text actually present. Accept "
+            "The labeled sections have exact roles: CURRENT TRANSFORMATION is an instruction, "
+            "never target prose; INPUT DRAFT is the source being changed; CANDIDATE DRAFT is "
+            "Writer's proposed result. SOURCE REQUEST records how INPUT DRAFT originated; in a "
+            "later transformation it is provenance, not an instruction to repeat. CURRENT "
+            "TRANSFORMATION has precedence and supersedes any older requirement that directly "
+            "conflicts on the same dimension, such as longer versus shorter or formal versus "
+            "casual. Review CANDIDATE DRAFT against only applicable parts of SOURCE REQUEST, "
+            "CURRENT TRANSFORMATION, and ACCUMULATED REQUIREMENTS. Judge whether the candidate "
+            "performs the transformation while preserving applicable source requirements. "
+            "Do not invent required phrases, exact wording, or a sentence-level golden answer. "
+            "Require exact wording only when an explicit requirement asks for it. For broad "
+            "requests, judge only the stated topic, format, tone, constraints, and evident "
+            "quality problems. For a transformation, compare INPUT DRAFT with CANDIDATE DRAFT "
+            "and verify that CURRENT TRANSFORMATION was materially performed; a "
+            "fluent unchanged draft must not PASS. Distinguish requested wording from text "
+            "actually present. Accept "
             "safe omission of unsupported claims and do not criticize absent unsupported "
             "content. Do not rewrite the draft. Return only JSON with verdict, summary, and "
             "issues. Verdict is pass or revise. Each issue has severity (minor or major), "
             "problem, and optional location, suggestion, and grounded_excerpt. Any "
-            "grounded_excerpt must be copied exactly from draft_to_review. A pass must have no "
+            "grounded_excerpt must be copied exactly from CANDIDATE DRAFT. A pass must have no "
             "major issues; revise must have at least one issue."
+            " Every transformation-related issue must include violated_requirement, "
+            "input_evidence, and candidate_evidence grounded in the labeled sections. Do not "
+            "claim that shortening did not occur when comparison metadata shows a meaningful "
+            "reduction; identify a different explicit applicable requirement if one exists. If "
+            "CURRENT TRANSFORMATION asks for shortening, never claim that an older request for "
+            "lengthening is the current requirement."
         ),
         context=context,
     )
 
 
-def editor_prompt(task: WritingTask, draft: str, report: CriticReport) -> str:
+def editor_prompt(
+    run_context: EditorialRunContext,
+    draft: str,
+    report: CriticReport,
+) -> str:
     """Build a single-pass revision prompt."""
 
     context = {
-        **_writing_context(task),
+        **_editorial_run_prompt_context(run_context),
         "writer_output_to_edit": draft,
         "critic_report": {
             "verdict": report.verdict.value,
@@ -244,6 +321,9 @@ def editor_prompt(task: WritingTask, draft: str, report: CriticReport) -> str:
                     "problem": issue.problem,
                     "suggestion": issue.suggestion,
                     "grounded_excerpt": issue.grounded_excerpt,
+                    "violated_requirement": issue.violated_requirement,
+                    "input_evidence": issue.input_evidence,
+                    "candidate_evidence": issue.candidate_evidence,
                 }
                 for issue in report.issues
             ],
@@ -298,9 +378,32 @@ def _task_context(
     return value
 
 
-def _writing_context(task: WritingTask) -> dict[str, Any]:
+def _editorial_run_prompt_context(run_context: EditorialRunContext) -> dict[str, Any]:
+    task = run_context.task
     return {
-        "original_request": task.brief.original_request,
-        "instructions": list(task.brief.instructions),
-        "current_working_draft": task.working_draft,
+        "editorial_run": {
+            "run_id": run_context.run_id,
+            "turn_id": run_context.turn_id,
+            "operation": run_context.operation.value,
+            "source_request": task.brief.original_request,
+            "current_instruction": run_context.current_instruction,
+            "revision_instructions": _prior_requirements(run_context),
+            "input_working_draft": task.working_draft,
+            "retrieved_artifact_id": run_context.retrieved_artifact_id,
+        }
     }
+
+
+def _prior_requirements(run_context: EditorialRunContext) -> list[str]:
+    instructions = list(run_context.task.brief.instructions)
+    if (
+        run_context.operation.value != "new_task"
+        and instructions
+        and instructions[-1] == run_context.current_instruction
+    ):
+        return instructions[:-1]
+    return instructions
+
+
+def _word_count(value: str | None) -> int:
+    return 0 if value is None else len(value.split())

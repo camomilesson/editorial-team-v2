@@ -109,7 +109,14 @@ def parse_critic_report(text: str, draft: str) -> CriticReport:
         _check_keys(
             item,
             required={"severity", "problem"},
-            optional={"location", "suggestion", "grounded_excerpt"},
+            optional={
+                "location",
+                "suggestion",
+                "grounded_excerpt",
+                "violated_requirement",
+                "input_evidence",
+                "candidate_evidence",
+            },
         )
         try:
             issue = CriticIssue(
@@ -118,6 +125,9 @@ def parse_critic_report(text: str, draft: str) -> CriticReport:
                 location=item.get("location"),
                 suggestion=item.get("suggestion"),
                 grounded_excerpt=item.get("grounded_excerpt"),
+                violated_requirement=item.get("violated_requirement"),
+                input_evidence=item.get("input_evidence"),
+                candidate_evidence=item.get("candidate_evidence"),
             )
         except (KeyError, TypeError, ValueError):
             raise AgentError("Critic returned invalid structured output") from None

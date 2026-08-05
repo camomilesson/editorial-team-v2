@@ -15,6 +15,7 @@ class CoordinatorRoute(StrEnum):
     CHAT = "chat"
     START_WRITING_TASK = "start_writing_task"
     REVISE_TASK = "revise_task"
+    SHOW_RETRIEVED_DRAFT = "show_retrieved_draft"
 
 
 class ClarificationReason(StrEnum):
@@ -104,5 +105,10 @@ class CoordinatorDecision:
                 raise ValueError("revise_task must not contain task_input")
             if self.talker_context is not None:
                 raise ValueError("revise_task must not contain talker_context")
+        elif self.route is CoordinatorRoute.SHOW_RETRIEVED_DRAFT:
+            if self.task_input is not None or self.revision_instructions is not None:
+                raise ValueError("show_retrieved_draft must not contain writing payloads")
+            if self.talker_context is not None:
+                raise ValueError("show_retrieved_draft must not contain talker_context")
         elif self.task_input is not None or self.revision_instructions is not None:
             raise ValueError("chat must not contain writing payloads")

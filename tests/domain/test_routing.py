@@ -10,11 +10,12 @@ from editorial_team.domain.routing import (
 )
 
 
-def test_coordinator_routes_are_exactly_chat_start_and_revise() -> None:
+def test_coordinator_routes_are_exactly_supported_routes() -> None:
     assert {route.value for route in CoordinatorRoute} == {
         "chat",
         "start_writing_task",
         "revise_task",
+        "show_retrieved_draft",
     }
 
 
@@ -41,6 +42,7 @@ def test_coordinator_routes_are_exactly_chat_start_and_revise() -> None:
             0.75,
             revision_instructions="Use a warmer opening.",
         ),
+        CoordinatorDecision(CoordinatorRoute.SHOW_RETRIEVED_DRAFT, 1.0),
     ],
 )
 def test_constructs_valid_coordinator_decisions(decision: CoordinatorDecision) -> None:
@@ -71,6 +73,25 @@ def test_confidence_must_be_finite_and_between_zero_and_one(confidence: float) -
             revision_instructions="Change it.",
         ),
         lambda: CoordinatorDecision(CoordinatorRoute.CHAT, 0.8, task_input="Write this."),
+        lambda: CoordinatorDecision(
+            CoordinatorRoute.SHOW_RETRIEVED_DRAFT,
+            0.8,
+            task_input="Rewrite this.",
+        ),
+        lambda: CoordinatorDecision(
+            CoordinatorRoute.SHOW_RETRIEVED_DRAFT,
+            0.8,
+            revision_instructions="Rewrite this.",
+        ),
+        lambda: CoordinatorDecision(
+            CoordinatorRoute.SHOW_RETRIEVED_DRAFT,
+            0.8,
+            talker_context=TalkerContext(
+                ClarificationReason.NO_MATCH,
+                (),
+                "Which draft?",
+            ),
+        ),
     ],
 )
 def test_route_payload_consistency(decision: object) -> None:

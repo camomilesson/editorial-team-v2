@@ -21,7 +21,9 @@ from editorial_team.domain.editorial import (
     CriticIssueSeverity,
     CriticReport,
     CriticVerdict,
+    EditorialRunContext,
     WritingTask,
+    WritingTaskStatus,
 )
 from editorial_team.graphs import build_parent_graph, create_sqlite_checkpointer
 
@@ -80,8 +82,11 @@ class Talker:
 @dataclass
 class Writer:
     tasks: list[WritingTask] = field(default_factory=list)
+    contexts: list[EditorialRunContext] = field(default_factory=list)
 
-    def write(self, task: WritingTask) -> str:
+    def write(self, context: EditorialRunContext) -> str:
+        self.contexts.append(context)
+        task = context.task
         self.tasks.append(task)
         return f"rewritten:{task.working_draft}"
 
@@ -90,20 +95,40 @@ class Writer:
 class Critic:
     verdict: CriticVerdict = CriticVerdict.PASS
 
-    def review(self, task: WritingTask, draft: str) -> CriticReport:
-        del task, draft
+    contexts: list[EditorialRunContext] = field(default_factory=list)
+
+    def review(self, context: EditorialRunContext, draft: str) -> CriticReport:
+        self.contexts.append(context)
+        del draft
         if self.verdict is CriticVerdict.PASS:
             return CriticReport(CriticVerdict.PASS, "Approved")
         return CriticReport(
             CriticVerdict.REVISE,
             "Revise it",
-            (CriticIssue(CriticIssueSeverity.MAJOR, "Improve it"),),
+            (
+                CriticIssue(
+                    CriticIssueSeverity.MAJOR,
+                    "Improve it",
+                    violated_requirement=context.current_instruction,
+                    input_evidence="The input draft contains the material to improve.",
+                    candidate_evidence="The candidate still needs the requested improvement.",
+                ),
+            ),
         )
 
 
+@dataclass
 class Editor:
-    def revise(self, task: WritingTask, draft: str, report: CriticReport) -> str:
-        del task, draft, report
+    contexts: list[EditorialRunContext] = field(default_factory=list)
+
+    def revise(
+        self,
+        context: EditorialRunContext,
+        draft: str,
+        report: CriticReport,
+    ) -> str:
+        self.contexts.append(context)
+        del draft, report
         return "edited historical output"
 
 
@@ -221,7 +246,10 @@ def test_search_then_explicit_get_draft_starts_new_immutable_run() -> None:
         [
             call("search_corpus", {"query": "Aurora"}, 1),
             call("get_draft", {"artifact_id": "artifact-old"}, 2),
-            final("start_writing_task", task_input="Make the historical draft shorter"),
+            final(
+                "start_writing_task",
+                task_input="A model-authored replacement draft that must be ignored.",
+            ),
         ]
     )
     service, writer, _, store, _ = service_for(model, Retriever(original))
@@ -229,7 +257,8 @@ def test_search_then_explicit_get_draft_starts_new_immutable_run() -> None:
     service.process_message("chat-a", "Make our Aurora draft shorter")
 
     assert writer.tasks[0].working_draft == original.content
-    assert writer.tasks[0].brief.original_request == "Make the historical draft shorter"
+    assert writer.tasks[0].brief.original_request == "Original request"
+    assert writer.tasks[0].brief.instructions == ("Make our Aurora draft shorter",)
     assert writer.tasks[0].id != original.task_id
     assert store.runs[0][0].content == "rewritten:Complete historical draft"
     assert original.content == "Complete historical draft"
@@ -286,9 +315,101 @@ def test_named_historical_aurora_request_overrides_active_skyrim_task(
         assert retriever.gets == [("aurora-latest", "chat-a")]
         assert writer.tasks[1].working_draft == "Complete Aurora draft"
         assert writer.tasks[1].working_draft != skyrim.working_draft  # type: ignore[union-attr]
-        assert writer.tasks[1].brief.original_request == "Add more emojis to Aurora"
+        assert writer.tasks[1].brief.original_request == "Make Aurora formal"
+        assert writer.tasks[1].brief.instructions == (user_text,)
         assert active_task(graph).id != skyrim.id  # type: ignore[union-attr]
         assert len(store.runs) == 2
+    finally:
+        close()
+
+
+def test_historical_transformation_activates_source_context_for_immediate_revision(
+    tmp_path: Path,
+) -> None:
+    sun = RetrievedDraft(
+        "sun-latest",
+        "sun-source-task",
+        ArtifactProducer.WRITER,
+        NOW,
+        "chat-a",
+        "Write a short post about the sun being nice",
+        "There is something uniquely restorative about the sun shining each morning.",
+    )
+    model = ScriptedChatModel(
+        [
+            final("start_writing_task", task_input="Write a funny tweet about apples"),
+            call("search_corpus", {"query": "sun draft", "prefer_recent": True}, 1),
+            call("get_draft", {"artifact_id": "sun-latest"}, 2),
+            final("start_writing_task", task_input="Make the sun draft shorter"),
+            final("revise_task", revision_instructions="Make it shorter please"),
+        ]
+    )
+    retriever = Retriever(sun, (result(1, "sun-latest", "sun excerpt"),))
+    checkpointer, close = create_sqlite_checkpointer(tmp_path / "state.db")
+    service, writer, _, store, graph = service_for(
+        model, retriever, checkpointer=checkpointer
+    )
+
+    try:
+        service.process_message("chat-a", "Write a funny tweet about apples")
+        apple_task = active_task(graph)
+        service.process_message("chat-a", "Remember the last sun draft and make it shorter")
+        sun_task = active_task(graph)
+        service.process_message("chat-a", "Make it shorter please")
+
+        assert sun_task is not None and sun_task != apple_task
+        assert sun_task.brief.original_request == sun.user_request
+        assert sun_task.brief.instructions == (
+            "Remember the last sun draft and make it shorter",
+        )
+        assert writer.contexts[1].retrieved_artifact_id == "sun-latest"
+        assert writer.contexts[1].task.working_draft == sun.content
+        assert writer.contexts[2].task.id != writer.contexts[1].task.id
+        assert writer.contexts[2].task.brief.original_request == sun.user_request
+        assert writer.contexts[2].current_instruction == "Make it shorter please"
+        assert len(store.runs) == 3
+    finally:
+        close()
+
+
+def test_named_sun_draft_overrides_active_apple_task_and_uses_sun_context(
+    tmp_path: Path,
+) -> None:
+    sun = RetrievedDraft(
+        "sun-latest",
+        "sun-source-task",
+        ArtifactProducer.WRITER,
+        NOW,
+        "chat-a",
+        "Write a short post about the sun being nice",
+        "The sun is a giant glowing hug for the planet.",
+    )
+    model = ScriptedChatModel(
+        [
+            final("start_writing_task", task_input="Write a funny tweet about apples"),
+            call("search_corpus", {"query": "sun draft"}, 1),
+            call("get_draft", {"artifact_id": "sun-latest"}, 2),
+            final("start_writing_task", task_input="Make the sun draft shorter"),
+        ]
+    )
+    retriever = Retriever(sun, (result(1, "sun-latest", "sun excerpt"),))
+    checkpointer, close = create_sqlite_checkpointer(tmp_path / "state.db")
+    service, writer, _, _, graph = service_for(
+        model, retriever, checkpointer=checkpointer
+    )
+
+    try:
+        service.process_message("chat-a", "Write a funny tweet about apples")
+        apple = active_task(graph)
+        service.process_message("chat-a", "Make the sun draft shorter")
+
+        run = writer.contexts[1]
+        assert retriever.searches[0]["query"] == "sun draft"
+        assert run.operation.value == "historical_transformation"
+        assert run.task.brief.original_request == sun.user_request
+        assert run.current_instruction == "Make the sun draft shorter"
+        assert run.task.working_draft == sun.content
+        assert active_task(graph) != apple
     finally:
         close()
 
@@ -333,6 +454,239 @@ def test_latest_named_historical_request_prefers_recent_and_loads_complete_draft
         assert writer.tasks[1].working_draft != "excerpt only"
     finally:
         close()
+
+
+@pytest.mark.parametrize(
+    "decision",
+    [final("show_retrieved_draft"), block_final("show_retrieved_draft")],
+)
+def test_retrieval_only_delivers_complete_draft_without_editorial_run(
+    decision: AIMessage,
+    tmp_path: Path,
+) -> None:
+    aurora = RetrievedDraft(
+        "aurora-latest",
+        "aurora-task",
+        ArtifactProducer.EDITOR,
+        NOW,
+        "chat-a",
+        "Latest Aurora",
+        "Exact complete Aurora draft.\nSecond paragraph.",
+    )
+    model = ScriptedChatModel(
+        [
+            call(
+                "search_corpus",
+                {"query": "Aurora", "prefer_recent": True},
+                1,
+            ),
+            call("get_draft", {"artifact_id": "aurora-latest"}, 2),
+            decision,
+        ]
+    )
+    retriever = Retriever(aurora, (result(1, "aurora-latest", "excerpt only"),))
+    checkpointer, close = create_sqlite_checkpointer(tmp_path / "state.db")
+    service, writer, talker, store, graph = service_for(
+        model, retriever, checkpointer=checkpointer
+    )
+
+    try:
+        messages = service.process_message("chat-a", "Pull up the latest Aurora draft.")
+
+        activated = active_task(graph)
+        assert retriever.searches[0]["prefer_recent"] is True
+        assert retriever.gets == [("aurora-latest", "chat-a")]
+        assert len(messages) == 1
+        assert messages[0].content == (
+            "📄 Retrieved draft\n\nExact complete Aurora draft.\nSecond paragraph."
+        )
+        assert activated is not None
+        assert activated.id not in {aurora.task_id, aurora.artifact_id}
+        assert activated.status is WritingTaskStatus.RETRIEVED
+        assert activated.brief.original_request == aurora.user_request
+        assert activated.working_draft == aurora.content
+        assert writer.tasks == []
+        assert talker.contexts == []
+        assert store.runs == []
+    finally:
+        close()
+
+
+def test_retrieval_only_activates_aurora_for_subsequent_revision(
+    tmp_path: Path,
+) -> None:
+    aurora = RetrievedDraft(
+        "aurora-latest",
+        "aurora-task",
+        ArtifactProducer.EDITOR,
+        NOW,
+        "chat-a",
+        "Latest Aurora",
+        "Complete Aurora draft",
+    )
+    model = ScriptedChatModel(
+        [
+            final("start_writing_task", task_input="Write Skyrim"),
+            call(
+                "search_corpus",
+                {"query": "Aurora", "prefer_recent": True},
+                1,
+            ),
+            call("get_draft", {"artifact_id": "aurora-latest"}, 2),
+            block_final("show_retrieved_draft"),
+            final("revise_task", revision_instructions="Make it shorter"),
+        ]
+    )
+    retriever = Retriever(aurora, (result(1, "aurora-latest", "Aurora excerpt"),))
+    checkpointer, close = create_sqlite_checkpointer(tmp_path / "state.db")
+    service, writer, talker, store, graph = service_for(
+        model, retriever, checkpointer=checkpointer
+    )
+
+    try:
+        service.process_message("chat-a", "Write Skyrim")
+        skyrim = active_task(graph)
+        shown = service.process_message("chat-a", "Pull up the latest Aurora draft.")
+        assert shown[0].content.endswith("Complete Aurora draft")
+        activated_aurora = active_task(graph)
+        assert activated_aurora is not None and activated_aurora != skyrim
+        assert activated_aurora.working_draft == aurora.content
+
+        service.process_message("chat-a", "Make it shorter")
+
+        assert len(writer.tasks) == 2
+        assert writer.tasks[1].working_draft == aurora.content
+        assert writer.tasks[1].brief.original_request == aurora.user_request
+        assert retriever.searches[0]["query"] == "Aurora"
+        assert len(store.runs) == 2
+        assert talker.contexts == []
+    finally:
+        close()
+
+
+def test_show_retrieved_draft_requires_successful_get_in_current_turn() -> None:
+    model = ScriptedChatModel(
+        [
+            call("search_corpus", {"query": "Aurora"}, 1),
+            final("show_retrieved_draft"),
+        ]
+    )
+    service, writer, _, store, _ = service_for(model, Retriever())
+
+    with pytest.raises(
+        ConversationServiceError,
+        match="Retrieved draft is required for display",
+    ):
+        service.process_message("chat-a", "Show the Aurora draft")
+
+    assert writer.tasks == [] and store.runs == []
+
+
+def test_failed_get_cannot_show_or_fall_back_to_active_revision(tmp_path: Path) -> None:
+    model = ScriptedChatModel(
+        [
+            final("start_writing_task", task_input="Write Skyrim"),
+            call("search_corpus", {"query": "Aurora"}, 1),
+            call("get_draft", {"artifact_id": "missing"}, 2),
+            final("show_retrieved_draft"),
+        ]
+    )
+    retriever = Retriever(results=(result(1, "missing", "Aurora excerpt"),))
+    checkpointer, close = create_sqlite_checkpointer(tmp_path / "state.db")
+    service, writer, _, store, graph = service_for(
+        model, retriever, checkpointer=checkpointer
+    )
+
+    try:
+        service.process_message("chat-a", "Write Skyrim")
+        skyrim = active_task(graph)
+        with pytest.raises(
+            ConversationServiceError,
+            match="Retrieved draft is required for display",
+        ):
+            service.process_message("chat-a", "Show Aurora")
+
+        assert active_task(graph) == skyrim
+        assert len(writer.tasks) == 1 and len(store.runs) == 1
+    finally:
+        close()
+
+
+def test_retrieval_only_activation_survives_checkpoint_restart(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "state.db"
+    first_model = ScriptedChatModel(
+        [final("start_writing_task", task_input="Write Skyrim")]
+    )
+    first_checkpointer, close_first = create_sqlite_checkpointer(database)
+    first_service, _, _, _, first_graph = service_for(
+        first_model, Retriever(), checkpointer=first_checkpointer
+    )
+    first_service.process_message("chat-a", "Write Skyrim")
+    skyrim = active_task(first_graph)
+    close_first()
+
+    aurora = RetrievedDraft(
+        "aurora-latest",
+        "aurora-task",
+        ArtifactProducer.EDITOR,
+        NOW,
+        "chat-a",
+        "Latest Aurora",
+        "Persisted complete Aurora draft",
+    )
+    second_model = ScriptedChatModel(
+        [
+            call("search_corpus", {"query": "Aurora", "prefer_recent": True}, 1),
+            call("get_draft", {"artifact_id": "aurora-latest"}, 2),
+            block_final("show_retrieved_draft"),
+        ]
+    )
+    second_checkpointer, close_second = create_sqlite_checkpointer(database)
+    second_service, writer, _, store, second_graph = service_for(
+        second_model,
+        Retriever(aurora, (result(1, "aurora-latest", "Aurora excerpt"),)),
+        checkpointer=second_checkpointer,
+    )
+
+    try:
+        messages = second_service.process_message(
+            "chat-a", "Pull up the latest Aurora draft."
+        )
+        snapshot = second_graph.get_state(
+            {"configurable": {"thread_id": "editorial:v1:chat-a"}}
+        )
+
+        assert messages[0].content.endswith("Persisted complete Aurora draft")
+        activated = active_task(second_graph)
+        assert activated is not None and activated != skyrim
+        assert activated.status is WritingTaskStatus.RETRIEVED
+        assert activated.working_draft == aurora.content
+        assert writer.tasks == [] and store.runs == []
+        assert snapshot.values["retrieved_draft"] is None
+        assert snapshot.values["coordinator_messages"] is None
+    finally:
+        close_second()
+
+    third_model = ScriptedChatModel(
+        [final("revise_task", revision_instructions="Make it shorter")]
+    )
+    third_checkpointer, close_third = create_sqlite_checkpointer(database)
+    third_service, third_writer, _, third_store, third_graph = service_for(
+        third_model,
+        Retriever(),
+        checkpointer=third_checkpointer,
+    )
+    try:
+        third_service.process_message("chat-a", "Make it shorter")
+
+        assert third_writer.tasks[0].working_draft == aurora.content
+        assert third_writer.tasks[0].brief.original_request == aurora.user_request
+        assert active_task(third_graph).working_draft.startswith("rewritten:")
+        assert len(third_store.runs) == 1
+    finally:
+        close_third()
 
 
 @pytest.mark.parametrize("instruction", ["Add more emojis", "Make it more formal"])

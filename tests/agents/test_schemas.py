@@ -47,6 +47,13 @@ def validate(schema: dict[str, object], payload: dict[str, object]) -> None:
                 "recommended_question": "Could you share another clue?",
             },
         },
+        {
+            "route": "show_retrieved_draft",
+            "confidence": 1,
+            "task_input": None,
+            "revision_instructions": None,
+            "talker_context": None,
+        },
     ],
 )
 def test_coordinator_schema_accepts_parser_contract(payload: dict[str, object]) -> None:
@@ -71,6 +78,7 @@ def test_coordinator_schema_matches_domain_enums_and_optional_keys() -> None:
         "chat",
         "start_writing_task",
         "revise_task",
+        "show_retrieved_draft",
     ]
 
 

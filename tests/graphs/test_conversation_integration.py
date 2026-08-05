@@ -21,6 +21,7 @@ from editorial_team.domain.editorial import (
     CriticIssueSeverity,
     CriticReport,
     CriticVerdict,
+    EditorialRunContext,
     WritingTask,
 )
 from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
@@ -73,8 +74,11 @@ class Talker:
 @dataclass
 class Writer:
     calls: list[WritingTask] = field(default_factory=list)
+    contexts: list[EditorialRunContext] = field(default_factory=list)
 
-    def write(self, task: WritingTask) -> str:
+    def write(self, context: EditorialRunContext) -> str:
+        self.contexts.append(context)
+        task = context.task
         self.calls.append(task)
         instruction = task.brief.instructions[-1] if task.brief.instructions else "initial"
         return f"{task.brief.original_request}|{instruction}"
@@ -84,23 +88,40 @@ class Writer:
 class Critic:
     verdict: CriticVerdict = CriticVerdict.PASS
     calls: int = 0
+    contexts: list[EditorialRunContext] = field(default_factory=list)
 
-    def review(self, task: WritingTask, draft: str) -> CriticReport:
+    def review(self, context: EditorialRunContext, draft: str) -> CriticReport:
+        self.contexts.append(context)
         self.calls += 1
         if self.verdict is CriticVerdict.PASS:
             return CriticReport(CriticVerdict.PASS, "Approved.")
         return CriticReport(
             CriticVerdict.REVISE,
             "Revise.",
-            (CriticIssue(CriticIssueSeverity.MAJOR, "Improve it."),),
+            (
+                CriticIssue(
+                    CriticIssueSeverity.MAJOR,
+                    "Improve it.",
+                    violated_requirement=context.current_instruction,
+                    input_evidence="The input draft contains the material to improve.",
+                    candidate_evidence="The candidate still needs the requested improvement.",
+                ),
+            ),
         )
 
 
 @dataclass
 class Editor:
     calls: int = 0
+    contexts: list[EditorialRunContext] = field(default_factory=list)
 
-    def revise(self, task: WritingTask, draft: str, report: CriticReport) -> str:
+    def revise(
+        self,
+        context: EditorialRunContext,
+        draft: str,
+        report: CriticReport,
+    ) -> str:
+        self.contexts.append(context)
         self.calls += 1
         return f"edited:{draft}"
 
