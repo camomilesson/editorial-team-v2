@@ -72,7 +72,8 @@ def test_parent_graph_contains_planned_foundation_nodes() -> None:
     assert _node_names(parent_builder()) == {
         "__start__",
         "validate_and_prepare_turn",
-        "coordinator",
+        "coordinator_agent",
+        "coordinator_tools",
         "talker",
         "prepare_new_task",
         "prepare_revision",
@@ -89,10 +90,12 @@ def test_parent_graph_preserves_planned_topology() -> None:
 
     assert {(edge.source, edge.target, edge.conditional) for edge in graph.edges} == {
         ("__start__", "validate_and_prepare_turn", False),
-        ("validate_and_prepare_turn", "coordinator", False),
-        ("coordinator", "talker", True),
-        ("coordinator", "prepare_new_task", True),
-        ("coordinator", "prepare_revision", True),
+        ("validate_and_prepare_turn", "coordinator_agent", False),
+        ("coordinator_agent", "coordinator_tools", True),
+        ("coordinator_agent", "talker", True),
+        ("coordinator_agent", "prepare_new_task", True),
+        ("coordinator_agent", "prepare_revision", True),
+        ("coordinator_tools", "coordinator_agent", False),
         ("talker", "finalize_turn", False),
         ("prepare_new_task", "editorial_subgraph", False),
         ("prepare_revision", "editorial_subgraph", False),

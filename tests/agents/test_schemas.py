@@ -15,7 +15,7 @@ from editorial_team.agents.schemas import (
     CRITIC_REPORT_SCHEMA,
 )
 from editorial_team.domain.editorial import CriticIssueSeverity, CriticVerdict
-from editorial_team.domain.routing import CoordinatorRoute
+from editorial_team.domain.routing import ClarificationReason, CoordinatorRoute
 
 
 def validate(schema: dict[str, object], payload: dict[str, object]) -> None:
@@ -38,6 +38,15 @@ def validate(schema: dict[str, object], payload: dict[str, object]) -> None:
             "task_input": None,
             "revision_instructions": "Make it shorter.",
         },
+        {
+            "route": "chat",
+            "confidence": 0.8,
+            "talker_context": {
+                "reason": "no_match",
+                "candidate_summaries": [],
+                "recommended_question": "Could you share another clue?",
+            },
+        },
     ],
 )
 def test_coordinator_schema_accepts_parser_contract(payload: dict[str, object]) -> None:
@@ -53,6 +62,10 @@ def test_coordinator_schema_matches_domain_enums_and_optional_keys() -> None:
     assert COORDINATOR_DECISION_SCHEMA["required"] == ["route", "confidence"]
     assert properties["task_input"]["type"] == ["string", "null"]
     assert properties["revision_instructions"]["type"] == ["string", "null"]
+    context = properties["talker_context"]
+    assert context["properties"]["reason"]["enum"] == [
+        reason.value for reason in ClarificationReason
+    ]
     assert COORDINATOR_DECISION_SCHEMA["additionalProperties"] is False
     assert properties["route"]["enum"] == [
         "chat",

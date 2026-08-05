@@ -107,7 +107,7 @@ python -m pytest -ra
 |---|---|
 | Telegram Bot API / `python-telegram-bot` | Receives allowlisted Telegram updates, preserves forum-topic identity, sends responses, and manages polling lifecycle. |
 | LangGraph | Defines and executes the conversation graph and editorial subgraph and integrates checkpoint persistence. |
-| Gemini | Model provider behind the provider-neutral Coordinator, Talker, Writer, Critic, Editor, and AdminAgent boundaries. |
+| Gemini | Model provider behind the LangChain tool-calling Coordinator and the provider-neutral Talker, Writer, Critic, Editor, and AdminAgent boundaries. |
 | SQLite LangGraph checkpointer | Stores durable conversation state and LangGraph checkpoint history locally. |
 | SQLite artifact store | Stores immutable completed Writer and Editor outputs and deterministic chunks in a separate local corpus. |
 | Sentence Transformers / NumPy | Embed eligible chunks locally and calculate exact in-memory cosine similarity. |
@@ -120,15 +120,15 @@ python -m pytest -ra
 
 | Component | Role |
 |---|---|
-| Coordinator | Classifies each turn as ordinary chat, a new writing task, or revision of the active task. |
+| Coordinator | Chooses retrieval tools when historical writing is referenced, then resolves the turn as chat, a new writing task, or revision of the active task. |
 | Talker | Produces ordinary conversational responses. |
 | Writer | Creates a new draft or rewrites from the canonical current draft and revision instructions. |
 | Critic | Independently reviews Writer output and returns `PASS` or `REVISE` with structured feedback. |
 | Editor | Runs only after `REVISE` and produces the edited canonical draft. |
 | `ConversationService` | Thin boundary that validates invocation input, selects the LangGraph thread, invokes the compiled graph, maps output, and sanitizes failures. |
 | Artifact store and chunker | Atomically save successful editorial runs and derive paragraph-aware chunks for later retrieval. |
-| `search_corpus` | Conversation-scoped LangChain tool returning ranked chunk excerpts and retrieval diagnostics. |
-| `get_draft` | Conversation-scoped LangChain tool returning one selected complete immutable artifact. |
+| `search_corpus` | Conversation-scoped LangChain tool selected by the Coordinator; returns ranked excerpts and supports repeated/refined searches. |
+| `get_draft` | Conversation-scoped LangChain tool explicitly selected by the Coordinator to load one complete immutable artifact. |
 | Shared runtime queue and worker | Serializes Telegram and heartbeat jobs through one bounded FIFO execution boundary. |
 | Heartbeat | Collects operational queue/worker metrics and submits evaluation through the shared runtime. |
 | AdminAgent | Assesses only operational snapshots under deterministic policy; it cannot access conversation messages, prompts, identities, or drafts. |
@@ -144,7 +144,16 @@ flowchart TD
     Q --> W["Single worker"]
     W --> CS["Thin ConversationService"]
     CS --> PG["LangGraph conversation graph"]
-    PG --> C["Coordinator"]
+    PG --> C["Coordinator Agent"]
+    C <-->|"tool calls and results"| TN["LangGraph coordinator_tools node"]
+    TN --> SC["search_corpus"]
+    TN --> GD["get_draft"]
+    SC --> RF["date + conversation filter"]
+    RF --> HY["dense + BM25"]
+    HY --> RRF["RRF"]
+    RRF --> RR["optional reranker"]
+    RF --> AS
+    GD --> AS
     C -->|"CHAT"| T["Talker"]
     C -->|"START_WRITING_TASK or REVISE_TASK"| ES["Editorial subgraph"]
     ES --> WR["Writer"]
@@ -374,15 +383,23 @@ Use `--database PATH` or `--fixture PATH` to override the configured database or
 
 ## Hybrid artifact retrieval
 
-Two real LangChain tools are implemented for the next conversational milestone:
+Two real LangChain tools are production-integrated into the Coordinator loop:
 
 - `search_corpus` performs conversation-scoped hybrid search over artifact chunks.
 - `get_draft` loads one selected complete artifact by ID in the same conversation scope.
 
-They are deliberately not yet bound to Coordinator or the production LangGraph. Tool factories
-capture the validated conversation ID outside the model-visible argument schema, so the model
-cannot select or override another conversation. A draft belonging to another conversation is
-indistinguishable from a missing draft.
+The Coordinator LLM decides whether and when to call them. It may search repeatedly with refined
+queries or time bounds, but loading a complete draft always requires an explicit `get_draft` call.
+The parent graph represents this as `coordinator_agent -> coordinator_tools -> coordinator_agent`.
+The tool node invokes the scoped `StructuredTool` objects through their LangChain runnable
+interface. Tools are constructed from the validated conversation ID for each loop step; that ID
+is absent from the model-visible schemas and no mutable global scope exists. A draft belonging to
+another conversation is indistinguishable from a missing draft.
+
+The loop permits at most six tool-execution rounds per user turn. Search excerpts alone never
+enter the writing pipeline. A successful `get_draft` starts a new editorial run with a fresh task
+ID, seeds its working draft with the complete immutable source, and persists only the new Writer
+and optional Editor outputs.
 
 Search first obtains eligible chunks from SQLite using the current conversation ID and inclusive
 UTC `created_from` and `created_to` filters. Both retrieval branches therefore operate over the
@@ -429,6 +446,61 @@ The command also accepts `--created-from`, `--created-to`, `--prefer-recent`, an
 `--no-rerank`. The embedding and cross-encoder models run locally but may download from their
 model registry on first use. Unit tests use deterministic fakes and never initialize or download
 the real models.
+
+### Retrieval sequences
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as Coordinator Agent
+    participant T as coordinator_tools
+    participant E as Editorial subgraph
+    participant A as Artifact SQLite
+    U->>C: Edit a previous draft
+    C->>T: search_corpus
+    T->>A: scoped hybrid search
+    T-->>C: excerpts
+    opt refinement needed
+        C->>T: search_corpus with refined query/bounds
+        T-->>C: refined excerpts
+    end
+    C->>T: get_draft(selected artifact_id)
+    T->>A: load complete scoped artifact
+    T-->>C: complete draft
+    C->>E: START_WRITING_TASK with fresh task ID
+    E->>E: Writer → Critic → optional Editor
+    E->>A: persist new immutable outputs
+```
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as Coordinator Agent
+    participant T as coordinator_tools
+    participant K as Talker
+    U->>C: Refer to an ambiguous old draft
+    C->>T: search_corpus
+    T-->>C: several plausible excerpts
+    C->>K: CHAT with bounded candidate context
+    K-->>U: concise clarification question
+    Note over C,K: No editorial run and no automatic newest selection
+```
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as Coordinator Agent
+    participant K as Talker
+    participant E as Editorial subgraph
+    U->>C: Ordinary chat, supplied-content writing, or active revision
+    alt ordinary chat
+        C->>K: CHAT (no tool call)
+        K-->>U: response
+    else supplied writing or active revision
+        C->>E: START or REVISE (no retrieval)
+        E-->>U: Writer/Critic/optional Editor result
+    end
+```
 
 ## Optional heartbeat and AdminAgent
 

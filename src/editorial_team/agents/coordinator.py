@@ -1,4 +1,10 @@
-"""Model-backed Coordinator implementation."""
+"""Model-backed Coordinator implementations."""
+
+from collections.abc import Sequence
+from typing import Any
+
+from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.tools import BaseTool
 
 from editorial_team.agents.parsing import execute_text, parse_coordinator_decision
 from editorial_team.agents.prompts import coordinator_prompt
@@ -28,3 +34,27 @@ class LlmCoordinator:
             structured_output=COORDINATOR_STRUCTURED_OUTPUT,
         )
         return parse_coordinator_decision(text)
+
+
+class ToolCallingCoordinator:
+    """Invoke one LangChain chat-model step with exactly the scoped retrieval tools."""
+
+    def __init__(self, chat_model: Any) -> None:
+        if not callable(getattr(chat_model, "bind_tools", None)):
+            raise ValueError("chat_model must support bind_tools")
+        self._chat_model = chat_model
+
+    def respond(
+        self,
+        messages: Sequence[BaseMessage],
+        tools: Sequence[BaseTool],
+    ) -> AIMessage:
+        """Return one tool-call or final-decision AI message."""
+
+        try:
+            response = self._chat_model.bind_tools(list(tools)).invoke(list(messages))
+        except Exception:
+            raise RuntimeError("Coordinator model call failed") from None
+        if not isinstance(response, AIMessage):
+            raise RuntimeError("Coordinator returned invalid output")
+        return response

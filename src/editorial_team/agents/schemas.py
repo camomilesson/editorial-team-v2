@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from editorial_team.domain.editorial import CriticIssueSeverity, CriticVerdict
-from editorial_team.domain.routing import CoordinatorRoute
+from editorial_team.domain.routing import ClarificationReason, CoordinatorRoute
 from editorial_team.models import StructuredOutputSpec
 from editorial_team.operations.models import AdminDecision, AdminReasonCode
 
@@ -18,6 +18,23 @@ COORDINATOR_DECISION_SCHEMA: dict[str, Any] = {
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
         "task_input": {"type": ["string", "null"], "minLength": 1},
         "revision_instructions": {"type": ["string", "null"], "minLength": 1},
+        "talker_context": {
+            "type": ["object", "null"],
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "enum": [reason.value for reason in ClarificationReason],
+                },
+                "candidate_summaries": {
+                    "type": "array",
+                    "items": {"type": "string", "minLength": 1},
+                    "maxItems": 5,
+                },
+                "recommended_question": {"type": "string", "minLength": 1},
+            },
+            "required": ["reason", "candidate_summaries", "recommended_question"],
+            "additionalProperties": False,
+        },
     },
     "required": ["route", "confidence"],
     "additionalProperties": False,

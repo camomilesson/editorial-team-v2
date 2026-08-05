@@ -15,10 +15,16 @@ from editorial_team.domain.editorial import (
     WritingTask,
     WritingTaskStatus,
 )
-from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
+from editorial_team.domain.routing import (
+    ClarificationReason,
+    CoordinatorDecision,
+    CoordinatorRoute,
+    TalkerContext,
+)
 
 __all__ = [
     "ConversationState",
+    "ClarificationReason",
     "CoordinatorDecision",
     "CoordinatorRoute",
     "CriticIssue",
@@ -31,4 +37,5 @@ __all__ = [
     "WritingBrief",
     "WritingTask",
     "WritingTaskStatus",
+    "TalkerContext",
 ]

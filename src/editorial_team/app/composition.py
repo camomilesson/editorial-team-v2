@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from telegram.ext import Application
 
@@ -17,6 +18,7 @@ from editorial_team.agents import (
     LlmEditor,
     LlmTalker,
     LlmWriter,
+    ToolCallingCoordinator,
 )
 from editorial_team.app.artifact_config import (
     ArtifactConfigurationError,
@@ -30,13 +32,23 @@ from editorial_team.app.heartbeat_config import (
     HeartbeatConfigurationError,
     load_heartbeat_configuration,
 )
+from editorial_team.app.retrieval_config import (
+    RetrievalConfiguration,
+    RetrievalConfigurationError,
+    load_retrieval_configuration,
+)
 from editorial_team.app.telegram_config import (
     TelegramConfigurationError,
     load_telegram_configuration,
 )
-from editorial_team.artifacts import ParagraphChunker, SQLiteArtifactStore
+from editorial_team.artifacts import HybridRetriever, ParagraphChunker, SQLiteArtifactStore
+from editorial_team.artifacts.embeddings import SentenceTransformerEmbeddingModel
+from editorial_team.artifacts.reranking import CrossEncoderReranker
 from editorial_team.conversation import ConversationService
-from editorial_team.gemini import create_gemini_client_from_env
+from editorial_team.gemini import (
+    create_gemini_chat_model_from_env,
+    create_gemini_client_from_env,
+)
 from editorial_team.graphs import build_parent_graph, create_sqlite_checkpointer
 from editorial_team.interfaces.admin import TelegramMaintainerNotifier
 from editorial_team.interfaces.telegram import TelegramAdapter, build_telegram_application
@@ -89,6 +101,9 @@ def build_conversation_service(
     *,
     artifact_path: Path | None = None,
     busy_timeout_seconds: float = 5.0,
+    coordinator_chat_model: object | None = None,
+    retrieval_configuration: RetrievalConfiguration | None = None,
+    user_timezone: str = "Europe/Madrid",
 ) -> ConversationService:
     """Wire the real agents around one shared provider-neutral model client."""
 
@@ -110,6 +125,25 @@ def build_conversation_service(
     )
     artifact_store.initialize()
     try:
+        retriever = None
+        tool_coordinator = None
+        if coordinator_chat_model is not None:
+            configuration = retrieval_configuration or RetrievalConfiguration()
+            retriever = HybridRetriever(
+                store=artifact_store,
+                embeddings=SentenceTransformerEmbeddingModel(configuration.embedding_model),
+                reranker=CrossEncoderReranker(configuration.reranker_model),
+                dense_depth=configuration.dense_depth,
+                bm25_depth=configuration.bm25_depth,
+                rrf_k=configuration.rrf_k,
+                fused_depth=configuration.fused_depth,
+                rerank_depth=configuration.rerank_depth,
+            )
+            tool_coordinator = ToolCallingCoordinator(coordinator_chat_model)
+    except BaseException:
+        artifact_store.close()
+        raise
+    try:
         checkpointer, close_checkpointer = create_sqlite_checkpointer(
             checkpoint_path,
             busy_timeout_seconds=busy_timeout_seconds,
@@ -128,6 +162,9 @@ def build_conversation_service(
             clock=clock,
             max_recent_messages=RECENT_MESSAGE_LIMIT,
             artifact_store=artifact_store,
+            tool_coordinator=tool_coordinator,
+            retriever=retriever,
+            user_timezone=user_timezone,
         ).compile(checkpointer=checkpointer)
     except BaseException:
         close_checkpointer()
@@ -177,9 +214,19 @@ def build_live_application_from_env() -> LiveApplication:
         checkpoint_configuration = load_checkpoint_configuration()
     except CheckpointConfigurationError:
         raise LiveConfigurationError("Checkpoint configuration is invalid") from None
+    try:
+        retrieval_configuration = load_retrieval_configuration()
+    except RetrievalConfigurationError:
+        raise LiveConfigurationError("Retrieval configuration is invalid") from None
+    user_timezone = os.getenv("EDITORIAL_USER_TIMEZONE", "Europe/Madrid").strip()
+    try:
+        ZoneInfo(user_timezone)
+    except (ValueError, ZoneInfoNotFoundError):
+        raise LiveConfigurationError("User timezone configuration is invalid") from None
 
     try:
         model = create_gemini_client_from_env()
+        coordinator_chat_model = create_gemini_chat_model_from_env()
     except Exception:
         raise LiveConfigurationError("Required model configuration is missing or invalid") from None
 
@@ -189,6 +236,9 @@ def build_live_application_from_env() -> LiveApplication:
             checkpoint_configuration.database_path,
             artifact_path=artifact_configuration.database_path,
             busy_timeout_seconds=checkpoint_configuration.busy_timeout_seconds,
+            coordinator_chat_model=coordinator_chat_model,
+            retrieval_configuration=retrieval_configuration,
+            user_timezone=user_timezone,
         )
     except Exception:
         raise LiveConfigurationError("Checkpoint database could not be initialized") from None

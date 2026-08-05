@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from editorial_team.domain.conversation import ConversationState, Message
-from editorial_team.domain.routing import CoordinatorDecision
+from editorial_team.domain.routing import CoordinatorDecision, TalkerContext
 
 
 class Coordinator(Protocol):
@@ -23,6 +23,11 @@ class Coordinator(Protocol):
 class Talker(Protocol):
     """Produce an ordinary conversational response."""
 
-    def respond(self, state: ConversationState, user_message: Message) -> str:
+    def respond(
+        self,
+        state: ConversationState,
+        user_message: Message,
+        context: TalkerContext | None = None,
+    ) -> str:
         """Return assistant text for the current user message."""
         ...

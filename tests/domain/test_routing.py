@@ -2,7 +2,12 @@ import math
 
 import pytest
 
-from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
+from editorial_team.domain.routing import (
+    ClarificationReason,
+    CoordinatorDecision,
+    CoordinatorRoute,
+    TalkerContext,
+)
 
 
 def test_coordinator_routes_are_exactly_chat_start_and_revise() -> None:
@@ -17,6 +22,15 @@ def test_coordinator_routes_are_exactly_chat_start_and_revise() -> None:
     "decision",
     [
         CoordinatorDecision(CoordinatorRoute.CHAT, 0.6),
+        CoordinatorDecision(
+            CoordinatorRoute.CHAT,
+            0.8,
+            talker_context=TalkerContext(
+                ClarificationReason.NO_MATCH,
+                (),
+                "Could you share another clue?",
+            ),
+        ),
         CoordinatorDecision(
             CoordinatorRoute.START_WRITING_TASK,
             1.0,

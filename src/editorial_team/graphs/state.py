@@ -2,6 +2,9 @@
 
 from typing import Literal, Required, TypedDict
 
+from langchain_core.messages import BaseMessage
+
+from editorial_team.artifacts.retrieval_types import RetrievedDraft
 from editorial_team.domain.conversation import ConversationState, Message
 from editorial_team.domain.editorial import CriticReport, EditorialResult, WritingTask
 from editorial_team.domain.routing import CoordinatorDecision
@@ -33,6 +36,10 @@ class EditorialGraphStateV1(TypedDict, total=False):
     working_draft: str | None
     editorial_result: EditorialResult | None
     assistant_messages: tuple[Message, ...] | None
+    coordinator_messages: tuple[BaseMessage, ...] | None
+    coordinator_tool_steps: int | None
+    coordinator_search_completed: bool | None
+    retrieved_draft: RetrievedDraft | None
 
 
 class GraphStateVersionError(ValueError):

@@ -178,6 +178,7 @@ def test_heartbeat_construction_failure_closes_service(
         lambda: HeartbeatConfiguration(enabled=True, maintainer_chat_id=123),
     )
     monkeypatch.setattr(composition, "create_gemini_client_from_env", Model)
+    monkeypatch.setattr(composition, "create_gemini_chat_model_from_env", object)
     monkeypatch.setattr(composition, "build_conversation_service", lambda *a, **k: service)
     monkeypatch.setattr(
         composition,
@@ -218,6 +219,7 @@ def test_adapter_construction_failure_closes_service(
         lambda: HeartbeatConfiguration(enabled=False),
     )
     monkeypatch.setattr(composition, "create_gemini_client_from_env", Model)
+    monkeypatch.setattr(composition, "create_gemini_chat_model_from_env", object)
     monkeypatch.setattr(composition, "build_conversation_service", lambda *a, **k: service)
     monkeypatch.setattr(
         composition,

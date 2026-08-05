@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 
+from editorial_team.agents.coordinator import ToolCallingCoordinator
+from editorial_team.agents.parsing import parse_coordinator_decision
+from editorial_team.agents.prompts import retrieval_coordinator_prompt
 from editorial_team.agents.protocols import Critic, Editor, Writer
 from editorial_team.artifacts.models import (
     ArtifactProducer,
@@ -17,6 +23,9 @@ from editorial_team.artifacts.models import (
     content_sha256,
 )
 from editorial_team.artifacts.protocols import ArtifactStore
+from editorial_team.artifacts.retrieval import HybridRetriever
+from editorial_team.artifacts.retrieval_types import RetrievedDraft
+from editorial_team.artifacts.tools import build_editorial_retrieval_tools
 from editorial_team.contracts.common import require_non_blank, require_utc_timestamp
 from editorial_team.contracts.identity import validate_identifier
 from editorial_team.conversation.formatting import (
@@ -46,7 +55,8 @@ from editorial_team.tracing import (
 
 IdentifierGenerator = Callable[[], str]
 UtcClock = Callable[[], datetime]
-ParentRoute = Literal["chat", "start_writing_task", "revise_task"]
+ParentRoute = Literal["tools", "chat", "start_writing_task", "revise_task"]
+MAX_COORDINATOR_TOOL_ROUNDS = 6
 
 
 class ConversationGraphError(ServiceError):
@@ -64,6 +74,9 @@ class _ConversationNodes:
         clock: UtcClock,
         max_recent_messages: int,
         artifact_store: ArtifactStore,
+        tool_coordinator: ToolCallingCoordinator | None,
+        retriever: HybridRetriever | None,
+        user_timezone: str,
     ) -> None:
         self._coordinator = coordinator
         self._talker = talker
@@ -72,6 +85,9 @@ class _ConversationNodes:
         self._clock = clock
         self._max_recent_messages = max_recent_messages
         self._artifact_store = artifact_store
+        self._tool_coordinator = tool_coordinator
+        self._retriever = retriever
+        self._user_timezone = user_timezone
 
     def validate_and_prepare_turn(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
         validate_graph_state_version(state)
@@ -104,9 +120,13 @@ class _ConversationNodes:
             "working_draft": None,
             "editorial_result": None,
             "assistant_messages": None,
+            "coordinator_messages": None,
+            "coordinator_tool_steps": 0,
+            "coordinator_search_completed": False,
+            "retrieved_draft": None,
         }
 
-    def coordinator(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
+    def coordinator_agent(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
         conversation, user_message = self._turn(state)
         set_trace_stage("coordinator")
         trace_event(
@@ -117,7 +137,31 @@ class _ConversationNodes:
             else conversation.active_task.status,
         )
         try:
-            decision = self._coordinator.decide(conversation, user_message)
+            if self._tool_coordinator is None:
+                decision = self._coordinator.decide(conversation, user_message)
+                response = None
+            else:
+                messages = state.get("coordinator_messages")
+                if messages is None:
+                    now = self._timestamp()
+                    zone = ZoneInfo(self._user_timezone)
+                    prompt = retrieval_coordinator_prompt(
+                        conversation,
+                        user_message,
+                        current_local_datetime=now.astimezone(zone).isoformat(),
+                        user_timezone=self._user_timezone,
+                        current_utc_datetime=now.isoformat(),
+                    )
+                    messages = (
+                        SystemMessage(content=prompt),
+                        HumanMessage(content=user_message.content),
+                    )
+                tools = self._scoped_tools(conversation.conversation_id)
+                response = self._tool_coordinator.respond(messages, tools)
+                messages = (*messages, response)
+                if response.tool_calls:
+                    return {"coordinator_messages": messages}
+                decision = parse_coordinator_decision(self._message_text(response))
         except Exception as exc:
             trace_event(
                 "coordinator_failed",
@@ -134,19 +178,105 @@ class _ConversationNodes:
                 decision.confidence,
                 task_input=decision.task_input,
                 revision_instructions=decision.revision_instructions,
+                talker_context=decision.talker_context,
             )
         except (TypeError, ValueError):
             raise ConversationGraphError("Coordinator returned an invalid decision") from None
         trace_event("coordinator_completed", route=decision.route, outcome="completed")
+        retrieved = state.get("retrieved_draft")
+        if (
+            isinstance(retrieved, RetrievedDraft)
+            and decision.route is not CoordinatorRoute.START_WRITING_TASK
+        ):
+            raise ConversationGraphError("Retrieved draft requires a new writing task")
         trace_event("route_started", route=decision.route)
-        return {"decision": decision}
+        return {
+            "decision": decision,
+            "coordinator_messages": (
+                state.get("coordinator_messages") if response is None else messages
+            ),
+        }
+
+    def coordinator_tools(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
+        """Execute one LLM-selected round through scoped LangChain tool runnables."""
+
+        conversation, _ = self._turn(state)
+        messages = state.get("coordinator_messages")
+        if (
+            not isinstance(messages, tuple)
+            or not messages
+            or not isinstance(messages[-1], AIMessage)
+        ):
+            raise ConversationGraphError("Coordinator tool state is invalid")
+        steps = state.get("coordinator_tool_steps", 0)
+        if not isinstance(steps, int) or steps >= MAX_COORDINATOR_TOOL_ROUNDS:
+            raise ConversationGraphError("Coordinator tool limit exceeded")
+        tools = {tool.name: tool for tool in self._scoped_tools(conversation.conversation_id)}
+        tool_messages: list[ToolMessage] = []
+        retrieved = state.get("retrieved_draft")
+        search_completed = state.get("coordinator_search_completed") is True
+        for call in messages[-1].tool_calls:
+            name = call.get("name")
+            tool = tools.get(name)
+            if tool is None:
+                output = {
+                    "ok": False,
+                    "error": {
+                        "type": "unknown_tool",
+                        "message": "The tool is unavailable",
+                    },
+                }
+            elif name == "get_draft" and not search_completed:
+                output = {
+                    "ok": False,
+                    "error": {
+                        "type": "search_required",
+                        "message": "Search the corpus before selecting a draft",
+                    },
+                }
+            else:
+                try:
+                    output = tool.invoke(call.get("args", {}))
+                except Exception:
+                    output = {
+                        "ok": False,
+                        "error": {
+                            "type": "invalid_tool_arguments",
+                            "message": "The tool arguments are invalid",
+                        },
+                    }
+            if (
+                name == "search_corpus"
+                and isinstance(output, dict)
+                and output.get("ok") is True
+            ):
+                search_completed = True
+            if name == "get_draft" and isinstance(output, dict) and output.get("ok") is True:
+                retrieved = self._retrieved_draft(output, conversation.conversation_id)
+            tool_messages.append(
+                ToolMessage(
+                    content=json.dumps(output, ensure_ascii=False, allow_nan=False),
+                    tool_call_id=str(call.get("id", "missing-call-id")),
+                    name=str(name),
+                )
+            )
+        return {
+            "coordinator_messages": (*messages, *tool_messages),
+            "coordinator_tool_steps": steps + 1,
+            "coordinator_search_completed": search_completed,
+            "retrieved_draft": retrieved,
+        }
 
     def talker(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
         conversation, user_message = self._turn(state)
         set_trace_stage("talker")
         trace_event("talker_started", stage="talker")
         try:
-            response = self._talker.respond(conversation, user_message)
+            context = self._decision(state).talker_context
+            if context is None:
+                response = self._talker.respond(conversation, user_message)
+            else:
+                response = self._talker.respond(conversation, user_message, context)
         except Exception as exc:
             trace_event(
                 "talker_failed",
@@ -174,6 +304,9 @@ class _ConversationNodes:
         conversation, _ = self._turn(state)
         now = self._timestamp()
         task_id = self._identifier("task")
+        retrieved = state.get("retrieved_draft")
+        if state.get("coordinator_tool_steps", 0) and not isinstance(retrieved, RetrievedDraft):
+            raise ConversationGraphError("A complete historical draft was not retrieved")
         return {
             "writing_task": WritingTask(
                 task_id,
@@ -182,6 +315,7 @@ class _ConversationNodes:
                 WritingTaskStatus.CREATED,
                 now,
                 now,
+                None if retrieved is None else retrieved.content,
             ),
         }
 
@@ -385,6 +519,10 @@ class _ConversationNodes:
             "critic_report": None,
             "working_draft": None,
             "editorial_result": None,
+            "coordinator_messages": None,
+            "coordinator_tool_steps": None,
+            "coordinator_search_completed": None,
+            "retrieved_draft": None,
         }
 
     @staticmethod
@@ -448,8 +586,48 @@ class _ConversationNodes:
         except (TypeError, ValueError):
             raise ConversationGraphError("Editorial artifact input is invalid") from None
 
+    def _scoped_tools(self, conversation_id: str) -> tuple[Any, Any]:
+        if self._retriever is None:
+            raise ConversationGraphError("Coordinator retrieval is unavailable")
+        return build_editorial_retrieval_tools(
+            retriever=self._retriever,
+            conversation_id=conversation_id,
+        )
+
+    @staticmethod
+    def _message_text(message: AIMessage) -> str:
+        if not isinstance(message.content, str) or not message.content.strip():
+            raise ConversationGraphError("Coordinator returned an invalid decision")
+        return message.content
+
+    @staticmethod
+    def _retrieved_draft(output: dict[str, Any], conversation_id: str) -> RetrievedDraft:
+        from editorial_team.contracts.common import parse_utc_timestamp
+
+        try:
+            data = output["data"]
+            return RetrievedDraft(
+                artifact_id=data["artifact_id"],
+                task_id=data["task_id"],
+                producer=ArtifactProducer(data["producer"]),
+                created_at=parse_utc_timestamp(data["created_at"], "created_at"),
+                conversation_id=conversation_id,
+                user_request=data["user_request"],
+                content=data["content"],
+            )
+        except (KeyError, TypeError, ValueError):
+            raise ConversationGraphError("Retrieved draft is invalid") from None
+
 
 def _route_coordinator_decision(state: EditorialGraphStateV1) -> ParentRoute:
+    messages = state.get("coordinator_messages")
+    if (
+        isinstance(messages, tuple)
+        and messages
+        and isinstance(messages[-1], AIMessage)
+        and messages[-1].tool_calls
+    ):
+        return "tools"
     decision = state.get("decision")
     if not isinstance(decision, CoordinatorDecision):
         raise ConversationGraphError("Coordinator returned an invalid decision")
@@ -467,6 +645,9 @@ def build_parent_graph(
     clock: UtcClock,
     max_recent_messages: int,
     artifact_store: ArtifactStore,
+    tool_coordinator: ToolCallingCoordinator | None = None,
+    retriever: HybridRetriever | None = None,
+    user_timezone: str = "Europe/Madrid",
 ) -> StateGraph[EditorialGraphStateV1]:
     """Build the complete authoritative conversation graph."""
 
@@ -481,10 +662,14 @@ def build_parent_graph(
         clock=clock,
         max_recent_messages=max_recent_messages,
         artifact_store=artifact_store,
+        tool_coordinator=tool_coordinator,
+        retriever=retriever,
+        user_timezone=user_timezone,
     )
     graph = StateGraph(EditorialGraphStateV1)
     graph.add_node("validate_and_prepare_turn", nodes.validate_and_prepare_turn)
-    graph.add_node("coordinator", nodes.coordinator)
+    graph.add_node("coordinator_agent", nodes.coordinator_agent)
+    graph.add_node("coordinator_tools", nodes.coordinator_tools)
     graph.add_node("talker", nodes.talker)
     graph.add_node("prepare_new_task", nodes.prepare_new_task)
     graph.add_node("prepare_revision", nodes.prepare_revision)
@@ -493,16 +678,18 @@ def build_parent_graph(
     graph.add_node("persist_editorial_artifacts", nodes.persist_editorial_artifacts)
     graph.add_node("finalize_turn", nodes.finalize_turn)
     graph.add_edge(START, "validate_and_prepare_turn")
-    graph.add_edge("validate_and_prepare_turn", "coordinator")
+    graph.add_edge("validate_and_prepare_turn", "coordinator_agent")
     graph.add_conditional_edges(
-        "coordinator",
+        "coordinator_agent",
         _route_coordinator_decision,
         {
+            "tools": "coordinator_tools",
             "chat": "talker",
             "start_writing_task": "prepare_new_task",
             "revise_task": "prepare_revision",
         },
     )
+    graph.add_edge("coordinator_tools", "coordinator_agent")
     graph.add_edge("talker", "finalize_turn")
     graph.add_edge("prepare_new_task", "editorial_subgraph")
     graph.add_edge("prepare_revision", "editorial_subgraph")
