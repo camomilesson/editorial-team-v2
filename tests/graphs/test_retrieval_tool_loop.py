@@ -143,6 +143,19 @@ def final(route: str, **values: Any) -> AIMessage:
     return AIMessage(content=json.dumps(payload))
 
 
+def block_final(route: str, **values: Any) -> AIMessage:
+    payload = final(route, **values).content
+    return AIMessage(
+        content=[
+            {
+                "type": "text",
+                "text": payload,
+                "extras": {"signature": "gemini-signature"},
+            }
+        ]
+    )
+
+
 def result(rank: int, artifact_id: str, excerpt: str) -> SearchResult:
     return SearchResult(
         rank,
@@ -187,6 +200,13 @@ def service_for(
     return ConversationService(graph_runner=graph), writer, talker, store, graph
 
 
+def active_task(graph: Any, conversation_id: str = "chat-a") -> WritingTask | None:
+    snapshot = graph.get_state(
+        {"configurable": {"thread_id": f"editorial:v1:{conversation_id}"}}
+    )
+    return snapshot.values["conversation"].active_task
+
+
 def test_search_then_explicit_get_draft_starts_new_immutable_run() -> None:
     original = RetrievedDraft(
         artifact_id="artifact-old",
@@ -213,9 +233,244 @@ def test_search_then_explicit_get_draft_starts_new_immutable_run() -> None:
     assert writer.tasks[0].id != original.task_id
     assert store.runs[0][0].content == "rewritten:Complete historical draft"
     assert original.content == "Complete historical draft"
+    final_invocation = model.invocations[2]
+    assert isinstance(final_invocation[-1], ToolMessage)
+    assert "Complete historical draft" not in final_invocation[-1].content
+    assert '"complete_draft_loaded": true' in final_invocation[-1].content
     assert [tuple(tool.name for tool in binding) for binding in model.bindings] == [
         ("search_corpus", "get_draft")
     ] * 3
+
+
+@pytest.mark.parametrize(
+    "user_text",
+    [
+        "remember how we worked on the Aurora post? can you pull up the latest draft "
+        "and add more emoji to it?",
+        "remember the aurora post and amend it to have more emoji",
+    ],
+)
+def test_named_historical_aurora_request_overrides_active_skyrim_task(
+    user_text: str,
+    tmp_path: Path,
+) -> None:
+    aurora = RetrievedDraft(
+        "aurora-latest",
+        "aurora-task",
+        ArtifactProducer.EDITOR,
+        NOW,
+        "chat-a",
+        "Make Aurora formal",
+        "Complete Aurora draft",
+    )
+    model = ScriptedChatModel(
+        [
+            final("start_writing_task", task_input="Write a formal Skyrim dragons post"),
+            call("search_corpus", {"query": "Aurora post"}, 1),
+            call("get_draft", {"artifact_id": "aurora-latest"}, 2),
+            final("start_writing_task", task_input="Add more emojis to Aurora"),
+        ]
+    )
+    retriever = Retriever(aurora, (result(1, "aurora-latest", "Aurora excerpt"),))
+    checkpointer, close = create_sqlite_checkpointer(tmp_path / "state.db")
+    service, writer, _, store, graph = service_for(
+        model, retriever, checkpointer=checkpointer
+    )
+
+    try:
+        service.process_message("chat-a", "Write a formal Skyrim dragons post")
+        skyrim = active_task(graph)
+        service.process_message("chat-a", user_text)
+
+        assert retriever.searches[0]["query"] == "Aurora post"
+        assert retriever.gets == [("aurora-latest", "chat-a")]
+        assert writer.tasks[1].working_draft == "Complete Aurora draft"
+        assert writer.tasks[1].working_draft != skyrim.working_draft  # type: ignore[union-attr]
+        assert writer.tasks[1].brief.original_request == "Add more emojis to Aurora"
+        assert active_task(graph).id != skyrim.id  # type: ignore[union-attr]
+        assert len(store.runs) == 2
+    finally:
+        close()
+
+
+def test_latest_named_historical_request_prefers_recent_and_loads_complete_draft(
+    tmp_path: Path,
+) -> None:
+    aurora = RetrievedDraft(
+        "aurora-latest",
+        "aurora-task",
+        ArtifactProducer.EDITOR,
+        NOW,
+        "chat-a",
+        "Latest Aurora",
+        "Complete latest Aurora artifact",
+    )
+    model = ScriptedChatModel(
+        [
+            final("start_writing_task", task_input="Write Skyrim"),
+            call(
+                "search_corpus",
+                {"query": "Aurora", "prefer_recent": True},
+                1,
+            ),
+            call("get_draft", {"artifact_id": "aurora-latest"}, 2),
+            final("start_writing_task", task_input="Make latest Aurora shorter"),
+        ]
+    )
+    retriever = Retriever(aurora, (result(1, "aurora-latest", "excerpt only"),))
+    checkpointer, close = create_sqlite_checkpointer(tmp_path / "state.db")
+    service, writer, _, _, _ = service_for(model, retriever, checkpointer=checkpointer)
+
+    try:
+        service.process_message("chat-a", "Write Skyrim")
+        service.process_message(
+            "chat-a", "Pull up the latest Aurora draft and add more emojis"
+        )
+
+        assert retriever.searches[0]["prefer_recent"] is True
+        assert retriever.gets == [("aurora-latest", "chat-a")]
+        assert writer.tasks[1].working_draft == "Complete latest Aurora artifact"
+        assert writer.tasks[1].working_draft != "excerpt only"
+    finally:
+        close()
+
+
+@pytest.mark.parametrize("instruction", ["Add more emojis", "Make it more formal"])
+def test_unqualified_revision_continues_active_skyrim_without_retrieval(
+    instruction: str,
+    tmp_path: Path,
+) -> None:
+    model = ScriptedChatModel(
+        [
+            final("start_writing_task", task_input="Write a formal Skyrim dragons post"),
+            final("revise_task", revision_instructions=instruction),
+        ]
+    )
+    retriever = Retriever()
+    checkpointer, close = create_sqlite_checkpointer(tmp_path / "state.db")
+    service, writer, _, _, _ = service_for(model, retriever, checkpointer=checkpointer)
+
+    try:
+        service.process_message("chat-a", "Write a formal Skyrim dragons post")
+        skyrim_draft = writer.tasks[0]
+        service.process_message("chat-a", instruction)
+
+        assert retriever.searches == [] and retriever.gets == []
+        assert writer.tasks[1].working_draft == f"rewritten:{skyrim_draft.working_draft}"
+        assert writer.tasks[1].brief.instructions == (instruction,)
+    finally:
+        close()
+
+
+@pytest.mark.parametrize(
+    ("results", "reason"),
+    [
+        ((), "no_match"),
+        (
+            (
+                result(1, "aurora-one", "first Aurora"),
+                result(2, "aurora-two", "second Aurora"),
+            ),
+            "ambiguous_candidates",
+        ),
+    ],
+)
+def test_unresolved_historical_search_never_falls_back_to_active_skyrim(
+    results: tuple[SearchResult, ...],
+    reason: str,
+    tmp_path: Path,
+) -> None:
+    context = {
+        "reason": reason,
+        "candidate_summaries": [item.excerpt for item in results],
+        "recommended_question": "Which Aurora draft should I use?",
+    }
+    model = ScriptedChatModel(
+        [
+            final("start_writing_task", task_input="Write Skyrim"),
+            call("search_corpus", {"query": "Aurora"}, 1),
+            final("chat", talker_context=context),
+        ]
+    )
+    checkpointer, close = create_sqlite_checkpointer(tmp_path / "state.db")
+    service, writer, talker, store, graph = service_for(
+        model, Retriever(results=results), checkpointer=checkpointer
+    )
+
+    try:
+        service.process_message("chat-a", "Write Skyrim")
+        skyrim = active_task(graph)
+        service.process_message("chat-a", "Remember the Aurora post and amend it")
+
+        assert active_task(graph) == skyrim
+        assert len(writer.tasks) == 1 and len(store.runs) == 1
+        assert talker.contexts[-1].reason.value == reason
+    finally:
+        close()
+
+
+def test_failed_historical_get_never_runs_writer_or_revises_active_skyrim(
+    tmp_path: Path,
+) -> None:
+    context = {
+        "reason": "tool_problem",
+        "candidate_summaries": [],
+        "recommended_question": "Could you identify the Aurora draft another way?",
+    }
+    model = ScriptedChatModel(
+        [
+            final("start_writing_task", task_input="Write Skyrim"),
+            call("search_corpus", {"query": "Aurora"}, 1),
+            call("get_draft", {"artifact_id": "missing-aurora"}, 2),
+            final("chat", talker_context=context),
+        ]
+    )
+    retriever = Retriever(results=(result(1, "missing-aurora", "Aurora"),))
+    checkpointer, close = create_sqlite_checkpointer(tmp_path / "state.db")
+    service, writer, _, _, graph = service_for(
+        model, retriever, checkpointer=checkpointer
+    )
+
+    try:
+        service.process_message("chat-a", "Write Skyrim")
+        skyrim = active_task(graph)
+        service.process_message("chat-a", "Remember Aurora and add emojis")
+
+        assert retriever.gets == [("missing-aurora", "chat-a")]
+        assert len(writer.tasks) == 1
+        assert active_task(graph) == skyrim
+    finally:
+        close()
+
+
+def test_historical_tool_turn_cannot_fall_back_to_active_task_revision(
+    tmp_path: Path,
+) -> None:
+    model = ScriptedChatModel(
+        [
+            final("start_writing_task", task_input="Write Skyrim"),
+            call("search_corpus", {"query": "Aurora"}, 1),
+            final("revise_task", revision_instructions="Add emojis"),
+        ]
+    )
+    checkpointer, close = create_sqlite_checkpointer(tmp_path / "state.db")
+    service, writer, _, _, graph = service_for(
+        model, Retriever(), checkpointer=checkpointer
+    )
+
+    try:
+        service.process_message("chat-a", "Write Skyrim")
+        skyrim = active_task(graph)
+        with pytest.raises(
+            ConversationServiceError,
+            match="Historical retrieval must not revise the active task",
+        ):
+            service.process_message("chat-a", "Remember Aurora and add emojis")
+
+        assert len(writer.tasks) == 1
+        assert active_task(graph) == skyrim
+    finally:
+        close()
 
 
 def test_search_only_can_clarify_but_cannot_start_writing() -> None:
@@ -364,6 +619,83 @@ def test_no_tool_chat_and_supplied_writing_take_existing_routes() -> None:
     assert len(store.runs) == 1
     assert retriever.searches == [] and retriever.gets == []
     assert len(model.invocations) == 2
+
+
+def test_gemini_block_no_tool_chat_and_supplied_writing_complete_end_to_end() -> None:
+    model = ScriptedChatModel(
+        [
+            block_final("chat"),
+            block_final("start_writing_task", task_input="Write supplied topic"),
+        ]
+    )
+    retriever = Retriever()
+    service, writer, talker, store, _ = service_for(model, retriever)
+
+    service.process_message("chat-a", "hello")
+    service.process_message("chat-a", "Write supplied topic")
+
+    assert len(talker.contexts) == 1
+    assert writer.tasks[0].brief.original_request == "Write supplied topic"
+    assert len(store.runs) == 1
+    assert retriever.searches == [] and retriever.gets == []
+
+
+def test_gemini_block_chat_and_revision_with_active_reviewed_task_complete(
+    tmp_path: Path,
+) -> None:
+    model = ScriptedChatModel(
+        [
+            block_final("start_writing_task", task_input="Write supplied topic"),
+            block_final("chat"),
+            block_final("revise_task", revision_instructions="Make it shorter"),
+        ]
+    )
+    checkpointer, close_checkpointer = create_sqlite_checkpointer(tmp_path / "state.db")
+    service, writer, talker, store, graph = service_for(
+        model, Retriever(), checkpointer=checkpointer
+    )
+
+    service.process_message("chat-a", "Write supplied topic")
+    task_after_writing = graph.get_state(
+        {"configurable": {"thread_id": "editorial:v1:chat-a"}}
+    ).values["conversation"].active_task
+    assert task_after_writing is not None
+    service.process_message("chat-a", "hello")
+    task_after_chat = graph.get_state(
+        {"configurable": {"thread_id": "editorial:v1:chat-a"}}
+    ).values["conversation"].active_task
+    assert task_after_chat == task_after_writing
+    service.process_message("chat-a", "Make it shorter")
+
+    assert len(talker.contexts) == 1
+    assert len(writer.tasks) == 2
+    assert writer.tasks[1].brief.instructions == ("Make it shorter",)
+    assert len(store.runs) == 2
+    close_checkpointer()
+
+
+def test_tool_call_blocks_still_enter_tool_path_before_final_parsing() -> None:
+    tool_response = call("search_corpus", {"query": "Aurora"}, 1)
+    tool_response.content = [
+        {"type": "thinking", "thinking": "tool selection", "extras": {"signature": "sig"}}
+    ]
+    model = ScriptedChatModel([tool_response, block_final("chat")])
+    retriever = Retriever()
+    service, _, _, _, _ = service_for(model, retriever)
+
+    service.process_message("chat-a", "Find Aurora")
+
+    assert [search["query"] for search in retriever.searches] == ["Aurora"]
+    assert model.invocations[1][-2] is tool_response
+    assert tool_response.content[0]["extras"]["signature"] == "sig"  # type: ignore[index]
+
+
+def test_block_final_without_usable_text_fails_through_sanitized_boundary() -> None:
+    model = ScriptedChatModel([AIMessage(content=[{"type": "thinking", "thinking": "only"}])])
+    service, _, _, _, _ = service_for(model, Retriever())
+
+    with pytest.raises(ConversationServiceError, match="Coordinator failed"):
+        service.process_message("chat-a", "hello")
 
 
 def test_get_draft_before_search_returns_error_without_calling_retriever() -> None:

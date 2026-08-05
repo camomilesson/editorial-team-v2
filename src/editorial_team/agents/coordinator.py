@@ -58,3 +58,28 @@ class ToolCallingCoordinator:
         if not isinstance(response, AIMessage):
             raise RuntimeError("Coordinator returned invalid output")
         return response
+
+
+def ai_message_text(message: AIMessage) -> str:
+    """Extract ordered usable text without changing the provider message."""
+
+    content = message.content
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif (
+                isinstance(block, dict)
+                and block.get("type") in {"text", "output_text"}
+                and isinstance(block.get("text"), str)
+            ):
+                parts.append(block["text"])
+        text = "".join(parts)
+    else:
+        text = ""
+    if not text.strip():
+        raise RuntimeError("Coordinator returned invalid output")
+    return text

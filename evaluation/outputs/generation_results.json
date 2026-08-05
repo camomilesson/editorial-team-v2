@@ -1,35 +1,35 @@
 {
   "cache": {
-    "hits": 0,
-    "misses": 116
+    "hits": 76,
+    "misses": 40
   },
   "case_count": 20,
   "case_set_sha256": "19b50e9b6666f18006c517b76b44040545562c588c5d368423c5e57e4e26d5b6",
   "comparison": {
     "improved": [
-      "gen-003",
-      "gen-009",
-      "gen-012"
+      "gen-009"
     ],
     "per_case": {
       "gen-001": 0.0,
-      "gen-003": 0.050000000000000044,
+      "gen-003": 0.0,
       "gen-004": -0.025000000000000022,
       "gen-007": 0.0,
       "gen-009": 0.03749999999999998,
       "gen-011": 0.0,
-      "gen-012": 0.050000000000000044,
+      "gen-012": -0.07499999999999996,
       "gen-017": 0.0,
       "gen-020": -0.050000000000000044
     },
     "unchanged": [
       "gen-001",
+      "gen-003",
       "gen-007",
       "gen-011",
       "gen-017"
     ],
     "worsened": [
       "gen-004",
+      "gen-012",
       "gen-020"
     ]
   },
@@ -88,7 +88,7 @@
           ]
         },
         {
-          "candidate_answer": "Aurora launches on 12 January and includes offline city maps.",
+          "candidate_answer": "Aurora launches on 12 January and includes downloadable city maps.",
           "case_id": "gen-003",
           "expected_out_of_corpus": false,
           "failure_category": "near_duplicate_conflicting_context",
@@ -98,19 +98,19 @@
           ],
           "metrics": {
             "answer_relevance": {
-              "reason": "The answer directly and accurately addresses both parts of the query regarding the launch date and the offline map feature.",
-              "score": 1.0
+              "reason": "The answer provides the correct launch date and mentions the maps, but fails to explicitly label them as 'offline' maps, which was a specific part of the query.",
+              "score": 0.8
             },
             "context_precision": {
-              "reason": "The retrieved contexts include two highly relevant chunks containing the answer, but also include three irrelevant chunks (Atlas offline maps, logistics outlook, and demonstration details) that introduce noise.",
+              "reason": "Two retrieved chunks are highly relevant, but three chunks contain unrelated noise about trail maps and logistics, reducing precision.",
               "score": 0.6
             },
             "context_recall": {
-              "reason": "The retrieved context explicitly confirms that Aurora launches on 12 January and provides downloadable offline city maps.",
+              "reason": "The retrieved contexts explicitly state the launch date is 12 January and confirm the inclusion of offline city maps.",
               "score": 1.0
             },
             "faithfulness": {
-              "reason": "The candidate's claims regarding the launch date and inclusion of offline maps are fully supported by the retrieved context.",
+              "reason": "The candidate answer accurately reflects the launch date and feature details provided in the retrieved context.",
               "score": 1.0
             }
           },
@@ -128,7 +128,7 @@
           ]
         },
         {
-          "candidate_answer": "Aurora protects location information through privacy-first location controls and by keeping location history private.",
+          "candidate_answer": "Aurora protects location information by using privacy-first location controls and keeping location history private.",
           "case_id": "gen-004",
           "expected_out_of_corpus": false,
           "failure_category": "irrelevant_distracting_context",
@@ -138,19 +138,19 @@
           ],
           "metrics": {
             "answer_relevance": {
-              "reason": "The answer directly addresses the query by synthesizing information from the provided contexts regarding privacy-first controls and location history.",
+              "reason": "The answer accurately synthesizes the information from the retrieved contexts to explain how Aurora protects location information.",
               "score": 1.0
             },
             "context_precision": {
-              "reason": "Only two of the five retrieved chunks are relevant to the query; the remaining three chunks introduce noise unrelated to Aurora's privacy features.",
+              "reason": "Only two out of the five retrieved chunks are relevant to Aurora's privacy features; the remaining chunks constitute noise as they discuss unrelated products or general logistics.",
               "score": 0.4
             },
             "context_recall": {
-              "reason": "The retrieved contexts contain all necessary information, as they explicitly mention both 'privacy-first location controls' and 'keeping location history private' in relation to Aurora.",
+              "reason": "The retrieved contexts explicitly contain both 'privacy-first location controls' and the fact that Aurora 'keeps location history private', which together provide all necessary information to support the golden answer.",
               "score": 1.0
             },
             "faithfulness": {
-              "reason": "The candidate answer accurately reflects the retrieved context, which mentions both 'privacy-first location controls' and keeping 'location history private'.",
+              "reason": "The candidate answer accurately synthesizes the information from the provided contexts, which confirm both the use of privacy-first location controls and the commitment to keeping location history private.",
               "score": 1.0
             }
           },
@@ -167,7 +167,7 @@
           ]
         },
         {
-          "candidate_answer": "Meridian Labs gained predictive planning for global supply chains and expanded supply-chain forecasting capabilities.",
+          "candidate_answer": "Meridian Labs gained predictive planning for global supply chains and expanded its supply-chain forecasting capabilities.",
           "case_id": "gen-007",
           "expected_out_of_corpus": false,
           "failure_category": "near_duplicate_conflicting_context",
@@ -177,19 +177,19 @@
           ],
           "metrics": {
             "answer_relevance": {
-              "reason": "The answer directly and accurately identifies the capabilities gained as stated in the source documents.",
+              "reason": "The answer accurately summarizes the capabilities gained by Meridian based on the provided context.",
               "score": 1.0
             },
             "context_precision": {
-              "reason": "Only two out of the five retrieved chunks are relevant to the query; the remaining three chunks contain noise unrelated to the acquisition or the specific capabilities gained.",
+              "reason": "Two of the five retrieved chunks contain relevant information, while the remaining three chunks are noise unrelated to the query.",
               "score": 0.4
             },
             "context_recall": {
-              "reason": "The retrieved contexts contain all the necessary information, specifically mentioning the strengthening of 'predictive planning for global supply chains' and the expansion of 'supply-chain forecasting capabilities'.",
+              "reason": "The retrieved contexts contain all the information necessary to answer the query, specifically mentioning predictive planning for global supply chains and expanded supply-chain forecasting capabilities.",
               "score": 1.0
             },
             "faithfulness": {
-              "reason": "The candidate answer accurately reflects the content provided in the retrieved contexts regarding predictive planning and supply-chain forecasting capabilities.",
+              "reason": "The candidate answer accurately reflects the information provided in the retrieved contexts, specifically the mention of predictive planning and expanded supply-chain forecasting capabilities.",
               "score": 1.0
             }
           },
@@ -287,7 +287,7 @@
           ]
         },
         {
-          "candidate_answer": "The report recommends that instead of applying the same inventory policy everywhere, operators should connect commercial priorities with operational signals, map critical dependencies, measure recovery time, and reserve capacity where substitution is difficult. Regarding supplier risk, the report notes that businesses are adding regional suppliers, but advises that regionalization is not automatic simplification. Decision makers should trace several tiers of dependency and compare recovery characteristics rather than relying only on geographic distance.",
+          "candidate_answer": "Regarding inventory, the report recommends that operators connect commercial priorities with operational signals rather than applying the same inventory policy everywhere, and that they reserve capacity where substitution is genuinely difficult.\n\nRegarding supplier risk, the report notes that regionalization is not automatic simplification, as local networks can still depend on imported materials, specialist tools, concentrated energy infrastructure, or single transport corridors. Consequently, decision makers are advised to trace several tiers of dependency and compare recovery characteristics rather than relying solely on geographic distance from customers.",
           "case_id": "gen-012",
           "expected_out_of_corpus": false,
           "failure_category": "incomplete_multi_chunk_context",
@@ -297,20 +297,20 @@
           ],
           "metrics": {
             "answer_relevance": {
-              "reason": "The answer accurately summarizes the report's recommendations for both topics, though it leans heavily on the provided context rather than the concise synthesis requested by the golden answer.",
-              "score": 0.8
+              "reason": "The answer accurately reflects the report's recommendations for both topics, though it slightly misattributes the 'regionalization' advice (which appears in the report) to the 'supplier risk' section, despite them being distinct segments in the source text.",
+              "score": 0.9
             },
             "context_precision": {
-              "reason": "The retrieval includes relevant information about supplier risk and general operational resilience, but fails to retrieve the specific 'Inventory strategy' section of the report, leading to incomplete coverage of the query's inventory aspect.",
-              "score": 0.4
+              "reason": "The retrieved context contains relevant information about inventory and supplier risk (specifically in the first two chunks), but also includes three noise chunks that are entirely irrelevant to the query.",
+              "score": 0.6
             },
             "context_recall": {
-              "reason": "The retrieved context contains all the necessary information in the 'Supplier risk' and 'Inventory strategy' sections to form the golden answer.",
+              "reason": "The retrieved chunks provide all necessary information regarding inventory segmentation (volatility, substitution, etc.) and supplier risk management (financial/operational indicators, dual sourcing with qualified capacity) to construct the golden answer.",
               "score": 1.0
             },
             "faithfulness": {
-              "reason": "All claims regarding inventory strategy and supplier risk are supported by the provided text, specifically the 'Executive summary' and 'Regionalization' sections.",
-              "score": 1.0
+              "reason": "The answer correctly summarizes the inventory recommendations found in the context. However, the supplier risk section describes general concepts from the context (regionalization), but misses the report's specific advice on supplier risk, which centers on combining financial indicators with operational observations (lead-time drift/quality) and ensuring dual sourcing has qualified capacity.",
+              "score": 0.5
             }
           },
           "query": "Compare the report's inventory and supplier-risk recommendations.",
@@ -405,10 +405,10 @@
       ],
       "categories": {
         "incomplete_multi_chunk_context": {
-          "answer_relevance": 0.4,
-          "context_precision": 0.2,
+          "answer_relevance": 0.45,
+          "context_precision": 0.3,
           "context_recall": 0.5,
-          "faithfulness": 0.5
+          "faithfulness": 0.25
         },
         "irrelevant_distracting_context": {
           "answer_relevance": 1.0,
@@ -423,7 +423,7 @@
           "faithfulness": 1.0
         },
         "near_duplicate_conflicting_context": {
-          "answer_relevance": 1.0,
+          "answer_relevance": 0.9333333333333332,
           "context_precision": 0.4666666666666666,
           "context_recall": 1.0,
           "faithfulness": 1.0
@@ -436,10 +436,10 @@
         }
       },
       "overall": {
-        "answer_relevance": 0.8666666666666667,
-        "context_precision": 0.2888888888888889,
+        "answer_relevance": 0.8555555555555556,
+        "context_precision": 0.3111111111111111,
         "context_recall": 0.8666666666666667,
-        "faithfulness": 0.8888888888888888
+        "faithfulness": 0.8333333333333334
       },
       "rerank": false
     },
@@ -508,7 +508,7 @@
           ]
         },
         {
-          "candidate_answer": "Secure Access Service Edge",
+          "candidate_answer": "SASE stands for Secure Access Service Edge.",
           "case_id": "gen-002",
           "expected_out_of_corpus": false,
           "failure_category": "missing_relevant_context",
@@ -518,19 +518,19 @@
           ],
           "metrics": {
             "answer_relevance": {
-              "reason": "The answer directly provides the full name for the acronym SASE as requested.",
+              "reason": "The candidate answer directly and accurately provides the definition of SASE found in the retrieved context.",
               "score": 1.0
             },
             "context_precision": {
-              "reason": "Only one of the four retrieved chunks is relevant; the remaining three contain noise unrelated to the query.",
-              "score": 0.25
+              "reason": "Only one out of five retrieved chunks is relevant; the others introduce significant noise unrelated to the query.",
+              "score": 0.2
             },
             "context_recall": {
-              "reason": "The retrieved context explicitly states that SASE stands for 'Secure Access Service Edge'.",
+              "reason": "The retrieved context explicitly states that SASE stands for Secure Access Service Edge.",
               "score": 1.0
             },
             "faithfulness": {
-              "reason": "The candidate answer accurately identifies that SASE stands for Secure Access Service Edge, which is explicitly stated in the retrieved context.",
+              "reason": "The candidate answer accurately identifies the definition of SASE, which is explicitly supported by the provided context.",
               "score": 1.0
             }
           },
@@ -667,7 +667,7 @@
           ]
         },
         {
-          "candidate_answer": "Apple reported stronger services revenue alongside steady iPhone demand.",
+          "candidate_answer": "Apple's quarterly revenue discussion was driven by stronger services revenue and steady iPhone demand.",
           "case_id": "gen-006",
           "expected_out_of_corpus": false,
           "failure_category": "irrelevant_distracting_context",
@@ -677,19 +677,19 @@
           ],
           "metrics": {
             "answer_relevance": {
-              "reason": "The answer directly identifies the factors driving Apple's revenue as stated in the source text.",
+              "reason": "The answer directly identifies the two primary factors mentioned in the text that drove the revenue discussion.",
               "score": 1.0
             },
             "context_precision": {
-              "reason": "Only one of the four retrieved chunks is relevant; the remaining three contain noise unrelated to the query.",
-              "score": 0.25
+              "reason": "Only one of the five retrieved chunks is relevant; the remaining four are irrelevant noise.",
+              "score": 0.2
             },
             "context_recall": {
-              "reason": "The retrieved context contains the specific information regarding Apple's revenue drivers mentioned in the golden answer.",
+              "reason": "The retrieved context contains all the necessary information to answer the question, matching the golden answer perfectly.",
               "score": 1.0
             },
             "faithfulness": {
-              "reason": "The candidate's claim is directly supported by the first retrieved context.",
+              "reason": "The candidate answer accurately identifies that stronger services revenue and steady iPhone demand were the drivers mentioned in the context.",
               "score": 1.0
             }
           },
@@ -746,7 +746,7 @@
           ]
         },
         {
-          "candidate_answer": "The transaction is expected to close in the second quarter.",
+          "candidate_answer": "The Meridian transaction is expected to close in the second quarter.",
           "case_id": "gen-008",
           "expected_out_of_corpus": false,
           "failure_category": "near_duplicate_conflicting_context",
@@ -756,19 +756,19 @@
           ],
           "metrics": {
             "answer_relevance": {
-              "reason": "The answer provides the correct timeframe but omits the qualifying condition mentioned in the source material.",
-              "score": 0.8
+              "reason": "The answer correctly identifies the timing of the transaction but omits the qualifying 'customary conditions' mentioned in the source context.",
+              "score": 0.9
             },
             "context_precision": {
-              "reason": "Two retrieved chunks provide relevant information to answer the query, while the remaining three chunks are noise unrelated to the transaction.",
+              "reason": "The first two retrieved chunks are highly relevant, but the remaining three chunks contain irrelevant noise unrelated to the query.",
               "score": 0.4
             },
             "context_recall": {
-              "reason": "The retrieved contexts contain all necessary information, including the expected closing timing and the subject to customary conditions.",
+              "reason": "The retrieved contexts contain the full information regarding the expected closing timeline and the associated customary conditions required by the golden answer.",
               "score": 1.0
             },
             "faithfulness": {
-              "reason": "The candidate answer accurately reflects the timeline provided in the retrieved context.",
+              "reason": "The candidate answer is fully supported by the retrieved context, which explicitly states the transaction is expected to close in the second quarter.",
               "score": 1.0
             }
           },
@@ -904,7 +904,7 @@
           ]
         },
         {
-          "candidate_answer": "Regarding inventory, the strongest programs connect commercial priorities with operational signals rather than applying the same inventory policy everywhere. Regarding supplier risk, regionalization is not viewed as automatic simplification because local networks may still depend on imported materials, specialist tools, energy infrastructure, or single transport corridors. Consequently, decision makers are advised to trace several tiers of dependency and compare recovery characteristics rather than relying only on geographic distance from customers.",
+          "candidate_answer": "Regarding inventory, programs should connect commercial priorities with operational signals rather than applying a uniform policy everywhere, reserving capacity only where substitution is genuinely difficult. Regarding supplier risk, regionalization is not an automatic simplification because local networks may still rely on imported materials, specialist tools, concentrated energy infrastructure, or single transport corridors. Decision-makers are advised to trace several tiers of dependency and compare recovery characteristics rather than relying solely on geographic distance.",
           "case_id": "gen-012",
           "expected_out_of_corpus": false,
           "failure_category": "incomplete_multi_chunk_context",
@@ -914,19 +914,19 @@
           ],
           "metrics": {
             "answer_relevance": {
-              "reason": "The answer provides accurate information from the context regarding inventory and supplier risk, but it discusses 'regionalization' (a separate section in the source) instead of the specific 'Supplier risk' section, missing the core recommendations for supplier risk management.",
-              "score": 0.6
+              "reason": "The answer accurately synthesizes the report's recommendations on inventory and supplier risk, although the second part of the answer relies more on the 'Regionalization' section of the text than the 'Supplier risk' section to explain the nuanced approach to supplier dependencies.",
+              "score": 0.9
             },
             "context_precision": {
-              "reason": "The retrieved context contains only one relevant chunk (the Executive Summary) which partially addresses the query. The other four chunks are noise unrelated to the logistics report or the inventory/supplier-risk topics.",
+              "reason": "The retrieved contexts include two highly relevant chunks containing the necessary information on inventory and supplier risk, but also include three completely irrelevant chunks regarding unrelated business news, which introduces significant noise.",
               "score": 0.4
             },
             "context_recall": {
-              "reason": "The retrieved context contains both the specific recommendation for supplier risk (combining operational indicators with qualified capacity) and the inventory strategy (segmentation based on volatility, substitution, replenishment, and exposure).",
+              "reason": "The retrieved context contains all necessary information to address the query regarding inventory strategy and supplier risk recommendations.",
               "score": 1.0
             },
             "faithfulness": {
-              "reason": "The candidate accurately reflects the provided context regarding inventory strategy and supplier risk, including the nuanced perspective on regionalization.",
+              "reason": "The candidate answer accurately reflects the retrieved context regarding both inventory (connecting commercial priorities with operational signals rather than blanket policies) and supplier risk (cautioning that regionalization is not automatic simplification and emphasizing the need to trace multi-tier dependencies).",
               "score": 1.0
             }
           },
@@ -984,7 +984,7 @@
           ]
         },
         {
-          "candidate_answer": "FinOps is the practice that joins engineering, finance, and product leaders to share timely usage data and ownership.",
+          "candidate_answer": "FinOps joins engineering, finance, and product by sharing timely usage data and ownership, connecting architecture decisions with unit economics.",
           "case_id": "gen-014",
           "expected_out_of_corpus": false,
           "failure_category": "missing_relevant_context",
@@ -994,19 +994,19 @@
           ],
           "metrics": {
             "answer_relevance": {
-              "reason": "The answer directly identifies FinOps as the practice and accurately names the teams involved as mentioned in the source context.",
+              "reason": "The answer directly identifies FinOps and correctly summarizes how it joins engineering, finance, and product teams using the provided context.",
               "score": 1.0
             },
             "context_precision": {
-              "reason": "Only the first retrieved chunk is relevant. The remaining four chunks are unrelated to FinOps, introducing significant noise.",
+              "reason": "Only one out of the five retrieved chunks is relevant to the query; the other four contain irrelevant information about logistics, AI, and SASE.",
               "score": 0.2
             },
             "context_recall": {
-              "reason": "The retrieved context contains all the necessary information: timely usage data, ownership, architecture decisions, and unit economics.",
+              "reason": "The retrieved context contains all the necessary information to answer the query, as it explicitly lists the teams and the concepts involved.",
               "score": 1.0
             },
             "faithfulness": {
-              "reason": "The candidate answer accurately reflects the information provided in the retrieved context regarding FinOps.",
+              "reason": "All claims in the candidate answer are directly supported by the provided context regarding FinOps.",
               "score": 1.0
             }
           },
@@ -1062,7 +1062,7 @@
           ]
         },
         {
-          "candidate_answer": "Demand for AI accelerators is shifting attention from wafer supply to high-bandwidth memory and advanced packaging.",
+          "candidate_answer": "Advanced packaging is a market constraint because demand for AI accelerators is shifting attention toward it, alongside high-bandwidth memory.",
           "case_id": "gen-016",
           "expected_out_of_corpus": false,
           "failure_category": "unsupported_claim_hallucination",
@@ -1072,19 +1072,19 @@
           ],
           "metrics": {
             "answer_relevance": {
-              "reason": "The answer identifies that demand for AI accelerators is the driver behind the constraint, but it does not explicitly explain the causal mechanism (i.e., that it is shifting focus/capacity away from traditional production).",
-              "score": 0.7
+              "reason": "The answer accurately identifies that demand for AI accelerators is the primary driver shifting industry focus toward advanced packaging, serving as a constraint.",
+              "score": 1.0
             },
             "context_precision": {
-              "reason": "Only one of the five retrieved chunks is relevant to the query; the other four contain irrelevant noise regarding logistics, corporate acquisitions, and agriculture.",
+              "reason": "Only one of the five retrieved chunks is relevant to the query; the remaining four contain noise unrelated to advanced packaging or AI accelerator market constraints.",
               "score": 0.2
             },
             "context_recall": {
-              "reason": "The retrieved context contains all the necessary information to address the impact of AI accelerator demand on high-bandwidth memory and advanced packaging while noting the state of conventional chip inventories.",
+              "reason": "The retrieved context contains all the necessary information to answer why advanced packaging is a market constraint, including the demand shift from AI accelerators and the status of conventional chip inventories.",
               "score": 1.0
             },
             "faithfulness": {
-              "reason": "The candidate answer accurately reflects the information provided in the first retrieved context chunk.",
+              "reason": "The candidate answer accurately reflects the context, which states that demand for AI accelerators is shifting attention toward high-bandwidth memory and advanced packaging, thereby establishing them as constraints.",
               "score": 1.0
             }
           },
@@ -1212,7 +1212,7 @@
           ]
         },
         {
-          "candidate_answer": "Helios shows residents allocated production, bill credits, and avoided emissions on their monthly statements.",
+          "candidate_answer": "Monthly statements show allocated production, bill credits, and avoided emissions.",
           "case_id": "gen-020",
           "expected_out_of_corpus": false,
           "failure_category": "missing_relevant_context",
@@ -1222,19 +1222,19 @@
           ],
           "metrics": {
             "answer_relevance": {
-              "reason": "The answer accurately and directly identifies the information shown on the monthly statements as specified in the source text.",
+              "reason": "The answer directly and accurately addresses the query using information provided in the context.",
               "score": 1.0
             },
             "context_precision": {
-              "reason": "Only one out of five retrieved chunks is relevant; the other four are irrelevant noise.",
+              "reason": "Only one out of five retrieved chunks is relevant; the other four contain significant noise unrelated to the query.",
               "score": 0.2
             },
             "context_recall": {
-              "reason": "The retrieved context contains all the necessary information to answer the query as specified in the golden answer.",
+              "reason": "The retrieved context contains the exact phrase 'Monthly statements show allocated production, bill credits, and avoided emissions,' which is sufficient to answer the query and covers the components mentioned in the golden answer.",
               "score": 1.0
             },
             "faithfulness": {
-              "reason": "The candidate answer accurately reflects the information provided in the retrieved context regarding what Helios shows on monthly statements.",
+              "reason": "The candidate answer accurately reflects the information provided in the context.",
               "score": 1.0
             }
           },
@@ -1253,25 +1253,25 @@
       ],
       "categories": {
         "incomplete_multi_chunk_context": {
-          "answer_relevance": 0.19999999999999998,
+          "answer_relevance": 0.3,
           "context_precision": 0.13333333333333333,
           "context_recall": 0.3333333333333333,
           "faithfulness": 0.3333333333333333
         },
         "irrelevant_distracting_context": {
           "answer_relevance": 1.0,
-          "context_precision": 0.2875,
+          "context_precision": 0.275,
           "context_recall": 1.0,
           "faithfulness": 1.0
         },
         "missing_relevant_context": {
           "answer_relevance": 1.0,
-          "context_precision": 0.21250000000000002,
+          "context_precision": 0.2,
           "context_recall": 1.0,
           "faithfulness": 1.0
         },
         "near_duplicate_conflicting_context": {
-          "answer_relevance": 0.9,
+          "answer_relevance": 0.925,
           "context_precision": 0.4125,
           "context_recall": 1.0,
           "faithfulness": 1.0
@@ -1283,15 +1283,15 @@
           "faithfulness": 1.0
         },
         "unsupported_claim_hallucination": {
-          "answer_relevance": 0.85,
+          "answer_relevance": 1.0,
           "context_precision": 0.2,
           "context_recall": 1.0,
           "faithfulness": 1.0
         }
       },
       "overall": {
-        "answer_relevance": 0.845,
-        "context_precision": 0.2225,
+        "answer_relevance": 0.8800000000000001,
+        "context_precision": 0.21750000000000003,
         "context_recall": 0.9,
         "faithfulness": 0.9
       },
@@ -1313,6 +1313,6 @@
     "rrf_k": 60,
     "top_k": 5
   },
-  "run_at": "2026-08-05T10:40:26.810861+00:00",
+  "run_at": "2026-08-05T10:47:45.941259+00:00",
   "scorer_version": "bounded-score-v1"
 }

@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 
-from editorial_team.agents.coordinator import ToolCallingCoordinator
+from editorial_team.agents.coordinator import ToolCallingCoordinator, ai_message_text
 from editorial_team.agents.parsing import parse_coordinator_decision
 from editorial_team.agents.prompts import retrieval_coordinator_prompt
 from editorial_team.agents.protocols import Critic, Editor, Writer
@@ -161,7 +161,7 @@ class _ConversationNodes:
                 messages = (*messages, response)
                 if response.tool_calls:
                     return {"coordinator_messages": messages}
-                decision = parse_coordinator_decision(self._message_text(response))
+                decision = parse_coordinator_decision(ai_message_text(response))
         except Exception as exc:
             trace_event(
                 "coordinator_failed",
@@ -184,6 +184,15 @@ class _ConversationNodes:
             raise ConversationGraphError("Coordinator returned an invalid decision") from None
         trace_event("coordinator_completed", route=decision.route, outcome="completed")
         retrieved = state.get("retrieved_draft")
+        tool_steps = state.get("coordinator_tool_steps", 0)
+        if (
+            isinstance(tool_steps, int)
+            and tool_steps > 0
+            and decision.route is CoordinatorRoute.REVISE_TASK
+        ):
+            raise ConversationGraphError(
+                "Historical retrieval must not revise the active task"
+            )
         if (
             isinstance(retrieved, RetrievedDraft)
             and decision.route is not CoordinatorRoute.START_WRITING_TASK
@@ -253,6 +262,7 @@ class _ConversationNodes:
                 search_completed = True
             if name == "get_draft" and isinstance(output, dict) and output.get("ok") is True:
                 retrieved = self._retrieved_draft(output, conversation.conversation_id)
+                output = self._draft_loaded_output(output)
             tool_messages.append(
                 ToolMessage(
                     content=json.dumps(output, ensure_ascii=False, allow_nan=False),
@@ -265,6 +275,25 @@ class _ConversationNodes:
             "coordinator_tool_steps": steps + 1,
             "coordinator_search_completed": search_completed,
             "retrieved_draft": retrieved,
+        }
+
+    @staticmethod
+    def _draft_loaded_output(output: dict[str, Any]) -> dict[str, Any]:
+        """Confirm a complete load to Coordinator without echoing draft content."""
+
+        data = output.get("data")
+        if not isinstance(data, dict):
+            raise ConversationGraphError("Retrieved draft is invalid")
+        return {
+            "ok": True,
+            "data": {
+                "artifact_id": data.get("artifact_id"),
+                "task_id": data.get("task_id"),
+                "producer": data.get("producer"),
+                "created_at": data.get("created_at"),
+                "user_request": data.get("user_request"),
+                "complete_draft_loaded": True,
+            },
         }
 
     def talker(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
@@ -593,12 +622,6 @@ class _ConversationNodes:
             retriever=self._retriever,
             conversation_id=conversation_id,
         )
-
-    @staticmethod
-    def _message_text(message: AIMessage) -> str:
-        if not isinstance(message.content, str) or not message.content.strip():
-            raise ConversationGraphError("Coordinator returned an invalid decision")
-        return message.content
 
     @staticmethod
     def _retrieved_draft(output: dict[str, Any], conversation_id: str) -> RetrievedDraft:
