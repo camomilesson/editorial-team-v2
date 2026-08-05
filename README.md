@@ -4,9 +4,13 @@ Editorial Team v2 is a conversational editorial assistant delivered through Tele
 can handle ordinary conversation, start a writing task, review a draft, apply editorial
 changes, and revise the latest task across later messages and application restarts.
 
-LangGraph is the sole conversation orchestrator and state owner. The retired REST `/brief`
-interface, separate conversation store, and legacy `WritingWorkflow` are not part of this
-version.
+LangGraph is the sole conversation orchestrator and state owner. The earlier prototype included
+an authenticated `/brief` HTTP ingress. During the LangGraph refactor, the project retained the
+core agent capabilities and primary Telegram product surface while removing that secondary HTTP
+adapter, keeping one supported live ingress instead of duplicate channel plumbing. The shared
+queue, writing workflow, natural-language routing, persistence, heartbeat, and administrative
+monitoring remain intact. The HTTP endpoint itself was not preserved. The separate conversation
+store and legacy `WritingWorkflow` are also not part of this version.
 
 ## Setup
 
@@ -154,6 +158,9 @@ flowchart TD
     RRF --> RR["optional reranker"]
     RF --> AS
     GD --> AS
+    C -->|"SHOW_RETRIEVED_DRAFT"| RA["Load fresh RETRIEVED active task"]
+    GD --> RA
+    RA --> DONE
     C -->|"CHAT"| T["Talker"]
     C -->|"START_WRITING_TASK or REVISE_TASK"| ES["Editorial subgraph"]
     ES --> WR["Writer"]
@@ -184,6 +191,25 @@ That identifier means only one system writing or editing operation: every later 
 a new one. Each saved Writer or Editor output has its own deterministic `artifact_id`, and the
 two outputs from a Writer–Editor run share the same run `task_id`. These identifiers do not
 express approval, document lineage, or which artifact is latest.
+
+Each conversation has exactly one active writing task: the draft most recently created, edited,
+or explicitly retrieved by the user. Its lifecycle includes `CREATED`, `DRAFTED`, `REVIEWED`,
+`REVISED`, and `RETRIEVED`. A `RETRIEVED` task contains the complete stored draft and source
+provenance, has a fresh conversation task ID and no stale Critic report, and is immediately valid
+for revision even though loading it did not execute the editorial subgraph.
+
+Before an editorial run enters the subgraph, the parent graph creates one immutable
+`EditorialRunContext`. Writer, Critic, and Editor receive the same run and task identity. The
+context carries the authoritative source request, input draft, current instruction, operation,
+and relevant retrieval metadata; Writer output and the Critic report are tagged to that run.
+Graph boundaries reject stale or mismatched outputs so one agent cannot evaluate a different
+task from the one another agent processed.
+
+For historical transformations, `SOURCE REQUEST` is provenance—the request that produced the
+retrieved draft—while `CURRENT TRANSFORMATION` is the user's present editing request. The current
+transformation supersedes directly conflicting older requirements. For example, if provenance
+says “Make the dragons tweet longer” and the current request says “Make it shorter,” the Critic
+must evaluate shortening as the current requirement while preserving compatible prior context.
 
 ## Interaction sequences
 
@@ -397,9 +423,22 @@ is absent from the model-visible schemas and no mutable global scope exists. A d
 another conversation is indistinguishable from a missing draft.
 
 The loop permits at most six tool-execution rounds per user turn. Search excerpts alone never
-enter the writing pipeline. A successful `get_draft` starts a new editorial run with a fresh task
-ID, seeds its working draft with the complete immutable source, and persists only the new Writer
-and optional Editor outputs.
+enter the writing pipeline. After `get_draft`, the requested action determines what happens next:
+a historical transformation starts a fresh editorial run, while a retrieval-only display loads
+the complete artifact as the active conversational draft without running or persisting an
+editorial workflow.
+
+For retrieval-only display, the path is `search_corpus → get_draft → SHOW_RETRIEVED_DRAFT`.
+The graph displays stored content verbatim and creates a fresh active task with status
+`RETRIEVED`. It does not call Writer, Critic, or Editor; persist a duplicate artifact; mutate the
+historical artifact; or make another model call after the final Coordinator decision. The active
+copy preserves the artifact's stored `user_request`, receives a fresh conversation task ID, and
+becomes the target of the next unqualified edit.
+
+For example, if bees is active and the user asks “Show me the latest dragons tweet,” dragons is
+displayed and becomes active. A subsequent “Make it longer” revises dragons. An explicit named
+reference to different historical work still overrides the active task and requires a fresh
+search and full-draft load.
 
 Search first obtains eligible chunks from SQLite using the current conversation ID and inclusive
 UTC `created_from` and `created_to` filters. Both retrieval branches therefore operate over the
@@ -414,11 +453,36 @@ The hybrid pipeline is:
 4. optional `cross-encoder/ms-marco-MiniLM-L6-v2` reranking;
 5. an exact ordered top-k tuple with dense, BM25, RRF, and reranker diagnostics preserved.
 
+### Chunking strategy
+
+Production artifacts use a target chunk size of 700 whitespace-delimited tokens, a maximum of
+1,000 tokens, and up to 90 tokens of overlap. The chunker preserves headings and paragraph
+boundaries where possible, groups coherent editorial paragraphs while approaching the target,
+splits an oversized paragraph at sentence boundaries, and uses hard token slicing only as a
+final fallback. Adjacent chunks reuse complete trailing units when they fit the overlap budget.
+Chunk identities are deterministic and incorporate the artifact, chunker version, ordinal, and
+normalized content hash.
+
+This policy is designed for editorial drafts rather than arbitrary web pages: headings and
+paragraphs commonly represent coherent editorial units, and preserving them improves semantic
+completeness. A 700-token target supplies substantial writing context without making chunks too
+broad; 90-token overlap reduces boundary loss; and the 1,000-token maximum prevents an unusually
+long paragraph from dominating retrieval.
+
+The lexical branch is real Okapi BM25 with `k1 = 1.5` and `b = 0.75`. It uses Unicode-aware,
+case-folded tokenization over the same prefiltered chunks as dense retrieval.
+
 Production parameters are dense depth 30, BM25 depth 30, RRF constant 60, fused depth 30,
 reranking depth 15, and final top-k 5. Reranking is implemented and configurable but disabled by
 default because the current measured corpus showed lower rank-one quality and no improvements.
 Explicit `rerank=true` remains supported. Recency is disabled by default and, when requested,
 only breaks ties after active relevance and RRF scores.
+
+Reranking adds a local cross-encoder inference step and additional resource use; first use may
+also require downloading and loading the model. No reproducible hardware-specific latency
+benchmark was recorded. The production default is based on measured quality rather than an
+invented timing estimate: retrieval quality declined with reranking, generation effects were
+mixed, and no consistent improvement justified the extra model cost and latency.
 
 Configure the local retrieval layer with:
 
@@ -456,6 +520,26 @@ sequenceDiagram
     participant U as User
     participant C as Coordinator Agent
     participant T as coordinator_tools
+    participant G as Conversation graph
+    participant A as Artifact SQLite
+    U->>C: Show the latest historical draft
+    C->>T: search_corpus
+    T->>A: scoped hybrid search
+    T-->>C: ranked excerpts
+    C->>T: get_draft(selected artifact_id)
+    T->>A: load complete scoped artifact
+    T-->>C: complete draft loaded
+    C->>G: SHOW_RETRIEVED_DRAFT
+    G->>G: Create fresh RETRIEVED active task
+    G-->>U: Stored draft verbatim
+    Note over G,A: No Writer, Critic, Editor, or artifact persistence
+```
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as Coordinator Agent
+    participant T as coordinator_tools
     participant E as Editorial subgraph
     participant A as Artifact SQLite
     U->>C: Edit a previous draft
@@ -469,9 +553,10 @@ sequenceDiagram
     C->>T: get_draft(selected artifact_id)
     T->>A: load complete scoped artifact
     T-->>C: complete draft
-    C->>E: START_WRITING_TASK with fresh task ID
+    C->>E: Fresh EditorialRunContext and START_WRITING_TASK
     E->>E: Writer → Critic → optional Editor
     E->>A: persist new immutable outputs
+    E-->>U: Transformed draft becomes active
 ```
 
 ```mermaid
@@ -556,8 +641,10 @@ python evaluation/retrieval/run_retrieval_eval.py
 
 Machine-readable rankings, golden IDs, metrics, stage positions, and reranking deltas are in
 `evaluation/outputs/retrieval_results.json`; the human report is in
-`evaluation/outputs/retrieval_report.md`. Generation and agent-level metrics are intentionally
-absent.
+`evaluation/outputs/retrieval_report.md`. The evaluation is deterministic once the local model
+weights are available and does not call an external judge, but the embedding and reranker weights
+may download from their registry on first use. Generation and agent-level metrics are
+intentionally absent.
 
 ## HW2 judged generation evaluation
 
@@ -590,23 +677,44 @@ version recording, caching, category reporting, and manual sampling mitigate but
 those risks.
 
 The real run used `gemini-3.1-flash-lite` for both generation and judging. This same-model choice
-is economical and consistent but increases self-preference risk. It produced 0 cache hits and 116
-misses on the first run.
+is economical and consistent but increases self-preference risk. The latest committed evaluation
+records 76 cache hits and 40 misses across 116 judge lookups. An initially empty cache would
+produce 116 judge misses; later runs avoid repeated judge calls when the content-addressed key
+matches. Keys include the case and metric, corpus and case-set hashes, hashed query, candidate
+answer, retrieved and golden contexts, golden answer, judge model, prompt version, and scorer
+version.
 
 | Condition | Faithfulness | Answer relevance | Context precision | Context recall |
 |---|---:|---:|---:|---:|
-| rerank on, all 20 | 0.9000 | 0.8450 | 0.2225 | 0.9000 |
-| rerank on, comparison subset | 0.8889 | 0.8222 | 0.2833 | 0.8889 |
-| rerank off, comparison subset | 0.8889 | 0.8667 | 0.2889 | 0.8667 |
+| rerank on, all 20 | 0.9000 | 0.8800 | 0.2175 | 0.9000 |
+| rerank on, matched 9-case subset | 0.8889 | 0.8556 | 0.2833 | 0.8889 |
+| rerank off, matched 9-case subset | 0.8333 | 0.8556 | 0.3111 | 0.8667 |
 
-On the matched nine-case subset, disabling reranking raised answer relevance by 0.0445 and context
-precision by 0.0056, lowered context recall by 0.0222, and left faithfulness unchanged. Three
-cases improved without reranking (`gen-003`, `gen-009`, `gen-012`), four were unchanged, and two
-worsened (`gen-004`, `gen-020`). Thus the generation comparison is mixed but does not overturn
-the retrieval evidence for keeping reranking disabled by default.
+### Generation results by failure category
+
+| Category | Faithfulness | Answer relevance | Context precision | Context recall |
+|---|---:|---:|---:|---:|
+| Incomplete multi-chunk | 0.3333 | 0.3000 | 0.1333 | 0.3333 |
+| Irrelevant/distracting context | 1.0000 | 1.0000 | 0.2750 | 1.0000 |
+| Missing relevant context | 1.0000 | 1.0000 | 0.2000 | 1.0000 |
+| Near-duplicate/conflicting context | 1.0000 | 0.9250 | 0.4125 | 1.0000 |
+| Out-of-corpus abstention | 1.0000 | 1.0000 | 0.0000 | 1.0000 |
+| Unsupported claim | 1.0000 | 1.0000 | 0.2000 | 1.0000 |
+
+Incomplete multi-chunk is the weakest category, and aggregate averages conceal that severe
+weakness. Context precision is generally low because top-five retrieval often contains
+irrelevant chunks. All out-of-corpus cases nevertheless abstained successfully; their context
+precision is zero because the forced top-five context is unrelated, not because the answers
+hallucinated.
+
+On the matched nine-case subset, reranking increased faithfulness and context recall slightly,
+left answer relevance unchanged, and decreased context precision. It improved `gen-009`, worsened
+`gen-004`, `gen-012`, and `gen-020`, and left `gen-001`, `gen-003`, `gen-007`, `gen-011`, and
+`gen-017` unchanged. Thus generation effects are mixed and do not overturn the retrieval evidence
+for keeping reranking disabled by default.
 
 The weakest category was incomplete multi-chunk context: faithfulness 0.3333, answer relevance
-0.2000, context precision 0.1333, and context recall 0.3333. In `gen-011` and `gen-013`, retrieval
+0.3000, context precision 0.1333, and context recall 0.3333. In `gen-011` and `gen-013`, retrieval
 returned the golden chunk but the generator still abstained; `gen-012` received relevant context
 yet produced an incomplete/misdirected comparison. This is a clear retrieval-versus-generation
 disagreement: successful chunk retrieval did not guarantee a sufficient answer. Conversely,
@@ -626,7 +734,13 @@ python evaluation/generation/run_generation_eval.py
 
 Optional settings are `EDITORIAL_EVAL_GENERATOR_MODEL`, `EDITORIAL_EVAL_JUDGE_MODEL`, and
 `EDITORIAL_EVAL_CACHE_PATH`. Generator and judge otherwise fall back to `AGENT_MODEL`; using the
-same Gemini family introduces self-preference risk. Cache hits avoid repeated judge calls.
+same Gemini family introduces self-preference risk. This command requires a configured model key
+and may incur generator and judge calls. A matching persistent cache avoids repeated judge calls;
+the cache path is ignored by Git and is not a submitted secret. No cache file is committed, but a
+locally configured cache can be reused across matching runs. Machine-readable results and the
+human report are written to `evaluation/outputs/generation_results.json` and
+`evaluation/outputs/generation_report.md`. The committed reports may be inspected without making
+new model calls.
 
 ## Optional heartbeat and AdminAgent
 
