@@ -48,6 +48,7 @@ TELEGRAM_BOT_TOKEN=replace-with-your-token
 EDITORIAL_TELEGRAM_ALLOWED_CHAT_IDS=123456789,-1001234567890
 EDITORIAL_CHECKPOINT_DB_PATH=runtime_data/conversations.db
 EDITORIAL_CHECKPOINT_BUSY_TIMEOUT_SECONDS=5
+EDITORIAL_ARTIFACT_DB_PATH=runtime_data/editorial_artifacts.db
 ```
 
 `EDITORIAL_TELEGRAM_ALLOWED_CHAT_IDS` is a required comma-separated list of exact numeric
@@ -108,6 +109,7 @@ python -m pytest -ra
 | LangGraph | Defines and executes the conversation graph and editorial subgraph and integrates checkpoint persistence. |
 | Gemini | Model provider behind the provider-neutral Coordinator, Talker, Writer, Critic, Editor, and AdminAgent boundaries. |
 | SQLite LangGraph checkpointer | Stores durable conversation state and LangGraph checkpoint history locally. |
+| SQLite artifact store | Stores immutable completed Writer and Editor outputs and deterministic chunks in a separate local corpus. |
 | pytest | Runs unit, integration, restart, isolation, transport, lifecycle, and failure tests. |
 | Ruff | Performs Python linting and import/style checks. |
 
@@ -121,6 +123,7 @@ python -m pytest -ra
 | Critic | Independently reviews Writer output and returns `PASS` or `REVISE` with structured feedback. |
 | Editor | Runs only after `REVISE` and produces the edited canonical draft. |
 | `ConversationService` | Thin boundary that validates invocation input, selects the LangGraph thread, invokes the compiled graph, maps output, and sanitizes failures. |
+| Artifact store and chunker | Atomically save successful editorial runs and derive paragraph-aware chunks for later retrieval. |
 | Shared runtime queue and worker | Serializes Telegram and heartbeat jobs through one bounded FIFO execution boundary. |
 | Heartbeat | Collects operational queue/worker metrics and submits evaluation through the shared runtime. |
 | AdminAgent | Assesses only operational snapshots under deterministic policy; it cannot access conversation messages, prompts, identities, or drafts. |
@@ -148,6 +151,7 @@ flowchart TD
     DONE --> TG
 
     PG <--> DB[("SQLite LangGraph checkpoints")]
+    ES --> AS[("SQLite editorial artifacts")]
 
     HB["Heartbeat scheduler"] --> Q
     W --> OS["Operational snapshot only"]
@@ -160,6 +164,12 @@ The parent graph owns conversation history and the active `WritingTask`. The tas
 `working_draft` is the authoritative durable draft. Coordinator decisions, Writer output,
 and editorial results are execution fields that are cleared from the latest completed state,
 although older LangGraph checkpoints can retain them.
+
+Every successful execution of the editorial pipeline also receives a private run `task_id`.
+That identifier means only one system writing or editing operation: every later revision gets
+a new one. Each saved Writer or Editor output has its own deterministic `artifact_id`, and the
+two outputs from a Writer–Editor run share the same run `task_id`. These identifiers do not
+express approval, document lineage, or which artifact is latest.
 
 ## Interaction sequences
 
@@ -331,6 +341,31 @@ Restart persistence requires both:
 SQLite lock waiting is bounded by `EDITORIAL_CHECKPOINT_BUSY_TIMEOUT_SECONDS`, which defaults
 to five seconds. A timeout fails through the sanitized user-facing error boundary and never
 falls back to in-memory state.
+
+## Editorial artifact persistence
+
+Completed Writer and Editor outputs are stored as immutable artifacts in the separate database
+configured by `EDITORIAL_ARTIFACT_DB_PATH`, which defaults to
+`runtime_data/editorial_artifacts.db`. Talker responses, Coordinator decisions, Critic reports,
+and formatted Telegram handoffs are never added to this corpus. Failed editorial runs leave no
+artifacts.
+
+A Critic `PASS` stores one Writer artifact. A Critic `REVISE` followed by a successful Editor
+run atomically stores both the Writer and Editor artifacts. Each artifact is deterministically
+split into versioned, paragraph-aware chunks while preserving exact source offsets. Replaying
+the same immutable run is idempotent; conflicting data is rejected rather than overwritten.
+
+The artifact database is the future retrieval corpus. The LangGraph checkpoint database remains
+responsible only for conversation recovery and is not searched as a corpus. No relationship is
+inferred between artifacts merely because they were created in chronological order.
+
+Seed the local artifact database with the small deterministic development fixture by running:
+
+```shell
+python scripts/seed_artifact_corpus.py
+```
+
+Use `--database PATH` or `--fixture PATH` to override the configured database or sample fixture.
 
 ## Optional heartbeat and AdminAgent
 

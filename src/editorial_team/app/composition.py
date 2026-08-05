@@ -18,6 +18,10 @@ from editorial_team.agents import (
     LlmTalker,
     LlmWriter,
 )
+from editorial_team.app.artifact_config import (
+    ArtifactConfigurationError,
+    load_artifact_configuration,
+)
 from editorial_team.app.checkpoint_config import (
     CheckpointConfigurationError,
     load_checkpoint_configuration,
@@ -30,6 +34,7 @@ from editorial_team.app.telegram_config import (
     TelegramConfigurationError,
     load_telegram_configuration,
 )
+from editorial_team.artifacts import ParagraphChunker, SQLiteArtifactStore
 from editorial_team.conversation import ConversationService
 from editorial_team.gemini import create_gemini_client_from_env
 from editorial_team.graphs import build_parent_graph, create_sqlite_checkpointer
@@ -82,6 +87,7 @@ def build_conversation_service(
     model: ModelClient,
     checkpoint_path: Path,
     *,
+    artifact_path: Path | None = None,
     busy_timeout_seconds: float = 5.0,
 ) -> ConversationService:
     """Wire the real agents around one shared provider-neutral model client."""
@@ -98,10 +104,19 @@ def build_conversation_service(
     def clock() -> datetime:
         return datetime.now(UTC)
 
-    checkpointer, close_checkpointer = create_sqlite_checkpointer(
-        checkpoint_path,
-        busy_timeout_seconds=busy_timeout_seconds,
+    artifact_store = SQLiteArtifactStore(
+        artifact_path or checkpoint_path.with_name("editorial_artifacts.db"),
+        chunker=ParagraphChunker(),
     )
+    artifact_store.initialize()
+    try:
+        checkpointer, close_checkpointer = create_sqlite_checkpointer(
+            checkpoint_path,
+            busy_timeout_seconds=busy_timeout_seconds,
+        )
+    except BaseException:
+        artifact_store.close()
+        raise
     try:
         graph_runner = build_parent_graph(
             coordinator=coordinator,
@@ -112,13 +127,30 @@ def build_conversation_service(
             identifier_generator=identifier_generator,
             clock=clock,
             max_recent_messages=RECENT_MESSAGE_LIMIT,
+            artifact_store=artifact_store,
         ).compile(checkpointer=checkpointer)
     except BaseException:
         close_checkpointer()
+        artifact_store.close()
         raise
+
+    def close_resources() -> None:
+        failure: BaseException | None = None
+        try:
+            close_checkpointer()
+        except BaseException as exc:
+            failure = exc
+        try:
+            artifact_store.close()
+        except BaseException as exc:
+            if failure is None:
+                failure = exc
+        if failure is not None:
+            raise failure
+
     return ConversationService(
         graph_runner=graph_runner,
-        close_checkpointer=close_checkpointer,
+        close_checkpointer=close_resources,
     )
 
 
@@ -129,6 +161,10 @@ def build_live_application_from_env() -> LiveApplication:
     if not token:
         raise LiveConfigurationError("Required Telegram configuration is missing")
 
+    try:
+        artifact_configuration = load_artifact_configuration()
+    except ArtifactConfigurationError:
+        raise LiveConfigurationError("Artifact configuration is invalid") from None
     try:
         heartbeat_configuration = load_heartbeat_configuration()
     except HeartbeatConfigurationError:
@@ -151,6 +187,7 @@ def build_live_application_from_env() -> LiveApplication:
         service = build_conversation_service(
             model,
             checkpoint_configuration.database_path,
+            artifact_path=artifact_configuration.database_path,
             busy_timeout_seconds=checkpoint_configuration.busy_timeout_seconds,
         )
     except Exception:

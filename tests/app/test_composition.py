@@ -51,6 +51,20 @@ class Builder:
         return self.runner
 
 
+class ArtifactStore:
+    def __init__(self, path: Path, *, chunker: object, events: list[str]) -> None:
+        del chunker
+        self.path = path
+        self.events = events
+        events.append("constructed")
+
+    def initialize(self) -> None:
+        self.events.append("initialized")
+
+    def close(self) -> None:
+        self.events.append("closed")
+
+
 def test_composition_builds_checkpointer_and_graph_once_for_repeated_messages(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -86,6 +100,14 @@ def test_graph_construction_failure_closes_checkpointer(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     closed: list[bool] = []
+    artifact_events: list[str] = []
+    monkeypatch.setattr(
+        composition,
+        "SQLiteArtifactStore",
+        lambda path, *, chunker: ArtifactStore(
+            path, chunker=chunker, events=artifact_events
+        ),
+    )
     monkeypatch.setattr(
         composition,
         "create_sqlite_checkpointer",
@@ -101,6 +123,37 @@ def test_graph_construction_failure_closes_checkpointer(
         composition.build_conversation_service(Model(), tmp_path / "state.db")
 
     assert closed == [True]
+    assert artifact_events == ["constructed", "initialized", "closed"]
+
+
+def test_artifact_store_is_owned_once_and_closed_with_service(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    events: list[str] = []
+    runner = Runner()
+    monkeypatch.setattr(
+        composition,
+        "SQLiteArtifactStore",
+        lambda path, *, chunker: ArtifactStore(path, chunker=chunker, events=events),
+    )
+    monkeypatch.setattr(
+        composition,
+        "create_sqlite_checkpointer",
+        lambda path, **kwargs: (object(), lambda: events.append("checkpoint-closed")),
+    )
+    monkeypatch.setattr(
+        composition,
+        "build_parent_graph",
+        lambda **kwargs: Builder(runner, {"compile": 0}),
+    )
+    service = composition.build_conversation_service(
+        Model(),
+        tmp_path / "state.db",
+        artifact_path=tmp_path / "artifacts.db",
+    )
+    service.close()
+    service.close()
+    assert events == ["constructed", "initialized", "checkpoint-closed", "closed"]
 
 
 def test_heartbeat_construction_failure_closes_service(

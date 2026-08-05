@@ -1,5 +1,11 @@
 """Live application composition."""
 
+from editorial_team.app.artifact_config import (
+    DEFAULT_ARTIFACT_DB_PATH,
+    ArtifactConfiguration,
+    ArtifactConfigurationError,
+    load_artifact_configuration,
+)
 from editorial_team.app.checkpoint_config import (
     DEFAULT_CHECKPOINT_BUSY_TIMEOUT_SECONDS,
     DEFAULT_CHECKPOINT_DB_PATH,
@@ -31,12 +37,15 @@ from editorial_team.app.telegram_config import (
 
 __all__ = [
     "RECENT_MESSAGE_LIMIT",
+    "DEFAULT_ARTIFACT_DB_PATH",
     "DEFAULT_CHECKPOINT_DB_PATH",
     "DEFAULT_CHECKPOINT_BUSY_TIMEOUT_SECONDS",
     "DEFAULT_HEARTBEAT_DB_PATH",
     "DEFAULT_HEARTBEAT_INTERVAL_SECONDS",
     "MIN_LIVE_HEARTBEAT_INTERVAL_SECONDS",
     "HeartbeatComponents",
+    "ArtifactConfiguration",
+    "ArtifactConfigurationError",
     "CheckpointConfiguration",
     "CheckpointConfigurationError",
     "HeartbeatConfiguration",
@@ -48,6 +57,7 @@ __all__ = [
     "build_conversation_service",
     "build_live_application_from_env",
     "load_heartbeat_configuration",
+    "load_artifact_configuration",
     "load_checkpoint_configuration",
     "load_telegram_configuration",
 ]

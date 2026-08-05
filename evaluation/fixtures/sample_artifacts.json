@@ -1,0 +1,18 @@
+[
+  {
+    "task_id": "fixture-aurora-launch",
+    "producer": "writer",
+    "created_at": "2026-08-01T09:00:00Z",
+    "conversation_id": "fixture-conversation",
+    "user_request": "Write a concise launch announcement for Aurora",
+    "content": "# Aurora Launch\n\nAurora helps editorial teams turn a clear brief into polished copy while keeping review focused and transparent.\n\nThe initial release is available today for invited teams."
+  },
+  {
+    "task_id": "fixture-aurora-launch",
+    "producer": "editor",
+    "created_at": "2026-08-01T09:00:00Z",
+    "conversation_id": "fixture-conversation",
+    "user_request": "Write a concise launch announcement for Aurora",
+    "content": "# Aurora Launch\n\nAurora helps editorial teams turn clear briefs into polished copy with focused, transparent review.\n\nThe initial release is available today for invited teams."
+  }
+]

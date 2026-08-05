@@ -10,6 +10,13 @@ from typing import Any, Literal
 from langgraph.graph import END, START, StateGraph
 
 from editorial_team.agents.protocols import Critic, Editor, Writer
+from editorial_team.artifacts.models import (
+    ArtifactProducer,
+    EditorialArtifact,
+    artifact_id_for,
+    content_sha256,
+)
+from editorial_team.artifacts.protocols import ArtifactStore
 from editorial_team.contracts.common import require_non_blank, require_utc_timestamp
 from editorial_team.contracts.identity import validate_identifier
 from editorial_team.conversation.formatting import (
@@ -56,6 +63,7 @@ class _ConversationNodes:
         identifier_generator: IdentifierGenerator,
         clock: UtcClock,
         max_recent_messages: int,
+        artifact_store: ArtifactStore,
     ) -> None:
         self._coordinator = coordinator
         self._talker = talker
@@ -63,6 +71,7 @@ class _ConversationNodes:
         self._identifier_generator = identifier_generator
         self._clock = clock
         self._max_recent_messages = max_recent_messages
+        self._artifact_store = artifact_store
 
     def validate_and_prepare_turn(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
         validate_graph_state_version(state)
@@ -164,15 +173,16 @@ class _ConversationNodes:
             raise ConversationGraphError("Writing task input is invalid")
         conversation, _ = self._turn(state)
         now = self._timestamp()
+        task_id = self._identifier("task")
         return {
             "writing_task": WritingTask(
-                self._identifier("task"),
+                task_id,
                 conversation.conversation_id,
                 WritingBrief(decision.task_input),
                 WritingTaskStatus.CREATED,
                 now,
                 now,
-            )
+            ),
         }
 
     def prepare_revision(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
@@ -191,11 +201,20 @@ class _ConversationNodes:
         if decision.revision_instructions is None:
             raise ConversationGraphError("Revision instructions are invalid")
         try:
+            now = self._timestamp()
             brief = replace(
                 task.brief,
                 instructions=(*task.brief.instructions, decision.revision_instructions),
             )
-            return {"writing_task": replace(task, brief=brief)}
+            return {
+                "writing_task": replace(
+                    task,
+                    id=self._identifier("task"),
+                    brief=brief,
+                    created_at=now,
+                    updated_at=now,
+                ),
+            }
         except (TypeError, ValueError):
             raise ConversationGraphError("Revision task is invalid") from None
 
@@ -263,7 +282,70 @@ class _ConversationNodes:
         )
         return {"turn_conversation": replace(conversation, active_task=active_task)}
 
+    def persist_editorial_artifacts(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
+        """Persist the complete successful Writer/optional Editor output set."""
+
+        completed_state = self._completed_turn_state(state)
+        conversation, _ = self._turn(state)
+        result = state.get("editorial_result")
+        task = state.get("writing_task")
+        decision = self._decision(state)
+        user_request = (
+            decision.task_input
+            if decision.route is CoordinatorRoute.START_WRITING_TASK
+            else decision.revision_instructions
+        )
+        if (
+            not isinstance(result, EditorialResult)
+            or not isinstance(task, WritingTask)
+            or not isinstance(user_request, str)
+        ):
+            raise ConversationGraphError("Editorial artifact input is invalid")
+        artifacts = [
+            self._artifact(
+                task_id=task.id,
+                producer=ArtifactProducer.WRITER,
+                created_at=task.created_at,
+                conversation_id=conversation.conversation_id,
+                user_request=user_request,
+                content=result.writer_output,
+            )
+        ]
+        if result.revision_applied:
+            artifacts.append(
+                self._artifact(
+                    task_id=task.id,
+                    producer=ArtifactProducer.EDITOR,
+                    created_at=task.created_at,
+                    conversation_id=conversation.conversation_id,
+                    user_request=user_request,
+                    content=result.working_draft,
+                )
+            )
+        try:
+            self._artifact_store.save_run(tuple(artifacts))
+        except Exception as exc:
+            trace_event(
+                "artifact_persistence_failed",
+                stage="artifact_persistence",
+                outcome="failed",
+                error_category=error_category(exc),
+            )
+            raise ConversationGraphError("Editorial artifacts could not be saved") from None
+        trace_event(
+            "artifact_persistence_completed",
+            stage="artifact_persistence",
+            outcome="completed",
+            artifact_count=len(artifacts),
+        )
+        return completed_state
+
     def finalize_turn(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
+        """Finalize a non-artifact chat turn."""
+
+        return self._completed_turn_state(state)
+
+    def _completed_turn_state(self, state: EditorialGraphStateV1) -> EditorialGraphStateV1:
         conversation, _ = self._turn(state)
         decision = self._decision(state)
         if decision.route is CoordinatorRoute.CHAT:
@@ -342,6 +424,30 @@ class _ConversationNodes:
         except (TypeError, ValueError):
             raise ConversationGraphError("Message creation failed") from None
 
+    @staticmethod
+    def _artifact(
+        *,
+        task_id: str,
+        producer: ArtifactProducer,
+        created_at: datetime,
+        conversation_id: str,
+        user_request: str,
+        content: str,
+    ) -> EditorialArtifact:
+        try:
+            return EditorialArtifact(
+                artifact_id=artifact_id_for(task_id, producer),
+                task_id=task_id,
+                producer=producer,
+                created_at=created_at,
+                conversation_id=conversation_id,
+                user_request=user_request,
+                content=content,
+                content_sha256=content_sha256(content),
+            )
+        except (TypeError, ValueError):
+            raise ConversationGraphError("Editorial artifact input is invalid") from None
+
 
 def _route_coordinator_decision(state: EditorialGraphStateV1) -> ParentRoute:
     decision = state.get("decision")
@@ -360,6 +466,7 @@ def build_parent_graph(
     identifier_generator: IdentifierGenerator,
     clock: UtcClock,
     max_recent_messages: int,
+    artifact_store: ArtifactStore,
 ) -> StateGraph[EditorialGraphStateV1]:
     """Build the complete authoritative conversation graph."""
 
@@ -373,6 +480,7 @@ def build_parent_graph(
         identifier_generator=identifier_generator,
         clock=clock,
         max_recent_messages=max_recent_messages,
+        artifact_store=artifact_store,
     )
     graph = StateGraph(EditorialGraphStateV1)
     graph.add_node("validate_and_prepare_turn", nodes.validate_and_prepare_turn)
@@ -382,6 +490,7 @@ def build_parent_graph(
     graph.add_node("prepare_revision", nodes.prepare_revision)
     graph.add_node("editorial_subgraph", nodes.editorial_subgraph)
     graph.add_node("finalize_task", nodes.finalize_task)
+    graph.add_node("persist_editorial_artifacts", nodes.persist_editorial_artifacts)
     graph.add_node("finalize_turn", nodes.finalize_turn)
     graph.add_edge(START, "validate_and_prepare_turn")
     graph.add_edge("validate_and_prepare_turn", "coordinator")
@@ -398,6 +507,7 @@ def build_parent_graph(
     graph.add_edge("prepare_new_task", "editorial_subgraph")
     graph.add_edge("prepare_revision", "editorial_subgraph")
     graph.add_edge("editorial_subgraph", "finalize_task")
-    graph.add_edge("finalize_task", "finalize_turn")
+    graph.add_edge("finalize_task", "persist_editorial_artifacts")
+    graph.add_edge("persist_editorial_artifacts", END)
     graph.add_edge("finalize_turn", END)
     return graph
