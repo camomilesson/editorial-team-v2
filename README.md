@@ -502,6 +502,61 @@ sequenceDiagram
     end
 ```
 
+## HW2 deterministic retrieval evaluation
+
+The committed evaluation uses 27 fixed realistic artifacts: 24 in `eval-retrieval-main` and
+three cross-conversation distractors. The production paragraph/heading-aware chunker produces 28
+stable chunks, including a two-chunk logistics report. The 12 cases cover rare terms, acronyms,
+semantic paraphrases, lexical/semantic mismatch, near duplicates, entity ambiguity, headings,
+date filters, recency, multiple relevant chunks, and one out-of-corpus probe.
+
+The measured configuration is dense depth 30, BM25 depth 30, reciprocal-rank fusion with
+`score = Σ 1 / (60 + rank)`, fused depth 30, reranker depth 15, and final k values 1, 3, 5, and
+10. Dense retrieval uses `sentence-transformers/all-MiniLM-L6-v2`; reranking uses
+`cross-encoder/ms-marco-MiniLM-L6-v2`. Exact `SearchResult` order is scored without grouping,
+deduplication, date resorting, or context repacking.
+
+- Hit rate@k is one when any golden chunk is present in the first k results.
+- Precision@k is relevant results divided by requested k, even with fewer returned results.
+- Recall@k is retrieved relevant chunks divided by all golden chunks.
+- MRR@k is reciprocal rank of the first relevant result within k, or zero.
+- nDCG@k uses binary relevance and the `1 / log2(position + 1)` discount.
+
+The empty-golden case is N/A, excluded from all aggregates, and retained for qualitative
+inspection. No abstention threshold is inferred.
+
+| Reranking | k | Hit rate | Precision | Recall | MRR@k | nDCG@k |
+|---|---:|---:|---:|---:|---:|---:|
+| off | 1 | 1.0000 | 1.0000 | 0.9545 | 1.0000 | 1.0000 |
+| off | 3 | 1.0000 | 0.3636 | 1.0000 | 1.0000 | 1.0000 |
+| off | 5 | 1.0000 | 0.2182 | 1.0000 | 1.0000 | 1.0000 |
+| off | 10 | 1.0000 | 0.1091 | 1.0000 | 1.0000 | 1.0000 |
+| on | 1 | 0.8182 | 0.8182 | 0.7727 | 0.8182 | 0.8182 |
+| on | 3 | 1.0000 | 0.3636 | 1.0000 | 0.9091 | 0.9329 |
+| on | 5 | 1.0000 | 0.2182 | 1.0000 | 0.9091 | 0.9329 |
+| on | 10 | 1.0000 | 0.1091 | 1.0000 | 0.9091 | 0.9329 |
+
+BM25 ranked the edited Meridian acquisition release and warehouse-automation heading above
+dense retrieval; dense ranked the bounded carbon-policy result above BM25. Both branches found
+every non-empty golden chunk within their configured depths, so this corpus does not demonstrate
+a result uniquely rescued by one branch or RRF. Fusion consolidated already successful evidence.
+Reranking left nine eligible cases unchanged and worsened two near-duplicate/recency cases
+(`ret-005` and `ret-010`), demoting the relevant chunk from rank one to rank two. It improved no
+case. On this corpus, reranker depth 15 is not justified by measured ranking quality; that negative
+result is retained rather than tuned away. There were no remaining retrieval misses by k=3.
+Increasing k completed multi-relevant recall while requested-k precision fell.
+
+Reproduce the real local-model run with:
+
+```shell
+python evaluation/retrieval/run_retrieval_eval.py
+```
+
+Machine-readable rankings, golden IDs, metrics, stage positions, and reranking deltas are in
+`evaluation/outputs/retrieval_results.json`; the human report is in
+`evaluation/outputs/retrieval_report.md`. Generation and agent-level metrics are intentionally
+absent.
+
 ## Optional heartbeat and AdminAgent
 
 Heartbeat is disabled by default. To enable it, configure:
