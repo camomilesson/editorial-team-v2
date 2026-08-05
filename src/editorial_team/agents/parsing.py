@@ -36,9 +36,7 @@ def execute_text(
     """Execute one bounded model request and return plain nonblank text."""
 
     try:
-        response = model.respond(
-            ModelRequest(input=prompt, structured_output=structured_output)
-        )
+        response = model.respond(ModelRequest(input=prompt, structured_output=structured_output))
     except Exception:
         raise AgentError(f"{role} model call failed") from None
     if (

@@ -112,9 +112,7 @@ class ToolRegistry:
                     f"Failed tool {tool_name} result must contain an error object"
                 )
             if not isinstance(error.get("type"), str):
-                raise ToolOutputError(
-                    f"Failed tool {tool_name} error must contain string 'type'"
-                )
+                raise ToolOutputError(f"Failed tool {tool_name} error must contain string 'type'")
             if not isinstance(error.get("message"), str):
                 raise ToolOutputError(
                     f"Failed tool {tool_name} error must contain string 'message'"

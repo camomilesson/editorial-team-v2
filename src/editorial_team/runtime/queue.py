@@ -39,7 +39,6 @@ class RuntimeJobSource(StrEnum):
     """Safe producer categories for shared runtime work."""
 
     TELEGRAM = "telegram"
-    EXTERNAL = "external"
     HEARTBEAT = "heartbeat"
 
 
@@ -133,19 +132,13 @@ class RuntimeQueue:
         *,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
-        if (
-            isinstance(capacity, bool)
-            or not isinstance(capacity, int)
-            or capacity <= 0
-        ):
+        if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity <= 0:
             raise ValueError("capacity must be a positive integer")
         if not callable(clock):
             raise ValueError("clock must be callable")
         self.capacity = capacity
         self._clock = clock
-        self._queue: asyncio.Queue[_QueuedJob | object] = asyncio.Queue(
-            maxsize=capacity
-        )
+        self._queue: asyncio.Queue[_QueuedJob | object] = asyncio.Queue(maxsize=capacity)
         self._worker: asyncio.Task[None] | None = None
         self._accepting = False
         self._closed = False

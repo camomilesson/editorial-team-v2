@@ -44,6 +44,4 @@ class TelegramMaintainerNotifier:
                     text=chunk,
                 )
         except Exception:
-            raise MaintainerNotificationError(
-                "Maintainer notification delivery failed"
-            ) from None
+            raise MaintainerNotificationError("Maintainer notification delivery failed") from None

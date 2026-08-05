@@ -43,9 +43,7 @@ def load_heartbeat_configuration() -> HeartbeatConfiguration:
     raw_chat_id = os.getenv("EDITORIAL_ADMIN_TELEGRAM_CHAT_ID")
     chat_id = _chat_id(raw_chat_id) if raw_chat_id and raw_chat_id.strip() else None
     if enabled and chat_id is None:
-        raise HeartbeatConfigurationError(
-            "Enabled heartbeat requires maintainer configuration"
-        )
+        raise HeartbeatConfigurationError("Enabled heartbeat requires maintainer configuration")
     return HeartbeatConfiguration(
         enabled=enabled,
         interval_seconds=interval,
@@ -72,10 +70,7 @@ def _interval(value: str | None, *, default: float) -> float:
         interval = float(value)
     except (TypeError, ValueError):
         raise HeartbeatConfigurationError("Heartbeat interval is invalid") from None
-    if (
-        not math.isfinite(interval)
-        or interval < MIN_LIVE_HEARTBEAT_INTERVAL_SECONDS
-    ):
+    if not math.isfinite(interval) or interval < MIN_LIVE_HEARTBEAT_INTERVAL_SECONDS:
         raise HeartbeatConfigurationError("Heartbeat interval is invalid")
     return interval
 
@@ -84,9 +79,7 @@ def _chat_id(value: str) -> int:
     try:
         chat_id = int(value)
     except (TypeError, ValueError):
-        raise HeartbeatConfigurationError(
-            "Maintainer configuration is invalid"
-        ) from None
+        raise HeartbeatConfigurationError("Maintainer configuration is invalid") from None
     if not value.strip() or chat_id == 0 or str(chat_id) != value.strip():
         raise HeartbeatConfigurationError("Maintainer configuration is invalid")
     return chat_id

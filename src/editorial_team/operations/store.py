@@ -138,9 +138,7 @@ class SQLiteHeartbeatResultStore:
                 sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY,
                 sqlite3.SQLITE_CONSTRAINT_UNIQUE,
             }:
-                raise DuplicateHeartbeatResultError(
-                    "Heartbeat result already exists"
-                ) from None
+                raise DuplicateHeartbeatResultError("Heartbeat result already exists") from None
             raise HeartbeatStoreError("Heartbeat result could not be saved") from None
         except sqlite3.Error:
             raise HeartbeatStoreError("Heartbeat result store operation failed") from None
@@ -198,9 +196,7 @@ class SQLiteHeartbeatResultStore:
                 if row is None:
                     raise HeartbeatResultNotFoundError("Heartbeat result was not found")
                 if row[0] != AdminDecision.NOTIFY.value:
-                    raise HeartbeatStoreError(
-                        "A SILENCE result cannot be marked as notified"
-                    )
+                    raise HeartbeatStoreError("A SILENCE result cannot be marked as notified")
                 connection.execute(
                     """
                     UPDATE heartbeat_results
@@ -222,9 +218,7 @@ class SQLiteHeartbeatResultStore:
     def _to_result(row: Sequence[object]) -> HeartbeatResult:
         try:
             last_success = (
-                None
-                if row[9] is None
-                else parse_utc_timestamp(str(row[9]), "last_success_at")
+                None if row[9] is None else parse_utc_timestamp(str(row[9]), "last_success_at")
             )
             return HeartbeatResult(
                 id=str(row[0]),

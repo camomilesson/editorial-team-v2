@@ -64,9 +64,7 @@ class HeartbeatEvaluationService:
             assessment = self._admin_agent.evaluate(snapshot, self._policy)
             expected = expected_admin_assessment(snapshot, self._policy)
             if assessment != expected:
-                raise AdminPolicyMismatchError(
-                    "Admin assessment conflicts with operational policy"
-                )
+                raise AdminPolicyMismatchError("Admin assessment conflicts with operational policy")
             trace_runtime_event(
                 "admin_completed",
                 correlation_id=correlation_id,
