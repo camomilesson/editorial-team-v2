@@ -137,3 +137,38 @@ def test_foreign_keys_uniqueness_and_close(tmp_path: Path) -> None:
                 """,
                 (NOW.isoformat(), content_sha256("x")),
             )
+
+
+def test_scoped_retrieval_reads_hide_other_conversations_and_filter_dates(
+    store: SQLiteArtifactStore,
+) -> None:
+    visible = artifact("visible", ArtifactProducer.WRITER, "Visible")
+    hidden = artifact(
+        "hidden",
+        ArtifactProducer.WRITER,
+        "Hidden",
+        conversation_id="conversation-2",
+    )
+    later = artifact(
+        "later",
+        ArtifactProducer.WRITER,
+        "Later",
+        created_at=NOW + timedelta(days=1),
+    )
+    store.save_run((visible,))
+    store.save_run((hidden,))
+    store.save_run((later,))
+    chunks = store.list_searchable_chunks(
+        conversation_id="conversation-1",
+        created_from=NOW,
+        created_to=NOW,
+    )
+    assert [item.task_id for item in chunks] == ["visible"]
+    assert store.get_artifact_for_conversation(visible.artifact_id, "conversation-1") == visible
+    assert store.get_artifact_for_conversation(hidden.artifact_id, "conversation-1") is None
+    with pytest.raises(ValueError, match="created_from"):
+        store.list_searchable_chunks(
+            conversation_id="conversation-1",
+            created_from=NOW + timedelta(days=1),
+            created_to=NOW,
+        )

@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Final
 
 from editorial_team.artifacts.chunking import ParagraphChunker
-from editorial_team.artifacts.models import ArtifactChunk, ArtifactProducer, EditorialArtifact
+from editorial_team.artifacts.models import (
+    ArtifactChunk,
+    ArtifactProducer,
+    EditorialArtifact,
+    SearchableArtifactChunk,
+)
 from editorial_team.contracts.common import parse_utc_timestamp, timestamp_to_json
 from editorial_team.contracts.identity import validate_identifier
 from editorial_team.errors import DuplicateEntityError, EntityNotFoundError, ServiceError
@@ -153,6 +158,30 @@ class SQLiteArtifactStore:
             raise ArtifactNotFoundError("Artifact was not found")
         return self._artifact_from_row(row)
 
+    def get_artifact_for_conversation(
+        self, artifact_id: str, conversation_id: str
+    ) -> EditorialArtifact | None:
+        """Load an artifact only when it belongs to the supplied conversation."""
+
+        artifact_id = validate_identifier(artifact_id, "artifact_id")
+        conversation_id = validate_identifier(conversation_id, "conversation_id")
+        try:
+            row = (
+                self._require_connection()
+                .execute(
+                    """
+                    SELECT artifact_id, task_id, producer, created_at, conversation_id,
+                           user_request, content, content_sha256
+                    FROM artifacts WHERE artifact_id = ? AND conversation_id = ?
+                    """,
+                    (artifact_id, conversation_id),
+                )
+                .fetchone()
+            )
+        except sqlite3.Error:
+            raise ArtifactStoreError("Artifact store operation failed") from None
+        return None if row is None else self._artifact_from_row(row)
+
     def get_chunks(self, artifact_id: str) -> tuple[ArtifactChunk, ...]:
         """Load all chunks for an artifact in canonical ordinal order."""
 
@@ -174,6 +203,55 @@ class SQLiteArtifactStore:
         except sqlite3.Error:
             raise ArtifactStoreError("Artifact store operation failed") from None
         return tuple(self._chunk_from_row(row) for row in rows)
+
+    def list_searchable_chunks(
+        self,
+        *,
+        conversation_id: str,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
+    ) -> tuple[SearchableArtifactChunk, ...]:
+        """Load the exact conversation- and date-eligible retrieval corpus."""
+
+        conversation_id = validate_identifier(conversation_id, "conversation_id")
+        clauses = ["c.conversation_id = ?"]
+        values: list[str] = [conversation_id]
+        if created_from is not None:
+            clauses.append("c.created_at >= ?")
+            values.append(timestamp_to_json(created_from))
+        if created_to is not None:
+            clauses.append("c.created_at <= ?")
+            values.append(timestamp_to_json(created_to))
+        if created_from is not None and created_to is not None and created_from > created_to:
+            raise ValueError("created_from must not be later than created_to")
+        try:
+            rows = (
+                self._require_connection()
+                .execute(
+                    """
+                    SELECT c.chunk_id, c.artifact_id, c.ordinal, c.content,
+                           c.character_start, c.character_end, c.created_at,
+                           c.producer, c.conversation_id, c.chunker_version,
+                           c.content_sha256, a.task_id, a.user_request
+                    FROM artifact_chunks AS c
+                    JOIN artifacts AS a ON a.artifact_id = c.artifact_id
+                    WHERE """
+                    + " AND ".join(clauses)
+                    + " ORDER BY c.created_at, c.artifact_id, c.ordinal, c.chunk_id",
+                    values,
+                )
+                .fetchall()
+            )
+        except sqlite3.Error:
+            raise ArtifactStoreError("Artifact store operation failed") from None
+        return tuple(
+            SearchableArtifactChunk(
+                chunk=self._chunk_from_row(tuple(row[:11])),
+                task_id=str(row[11]),
+                user_request=str(row[12]),
+            )
+            for row in rows
+        )
 
     def list_artifacts(
         self,

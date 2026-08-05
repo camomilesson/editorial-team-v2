@@ -110,6 +110,9 @@ python -m pytest -ra
 | Gemini | Model provider behind the provider-neutral Coordinator, Talker, Writer, Critic, Editor, and AdminAgent boundaries. |
 | SQLite LangGraph checkpointer | Stores durable conversation state and LangGraph checkpoint history locally. |
 | SQLite artifact store | Stores immutable completed Writer and Editor outputs and deterministic chunks in a separate local corpus. |
+| Sentence Transformers / NumPy | Embed eligible chunks locally and calculate exact in-memory cosine similarity. |
+| Local BM25 and Reciprocal Rank Fusion | Combine lexical and dense chunk rankings without comparing their raw scores. |
+| Cross-encoder reranker | Optionally reranks the fused shortlist with a local model. |
 | pytest | Runs unit, integration, restart, isolation, transport, lifecycle, and failure tests. |
 | Ruff | Performs Python linting and import/style checks. |
 
@@ -124,6 +127,8 @@ python -m pytest -ra
 | Editor | Runs only after `REVISE` and produces the edited canonical draft. |
 | `ConversationService` | Thin boundary that validates invocation input, selects the LangGraph thread, invokes the compiled graph, maps output, and sanitizes failures. |
 | Artifact store and chunker | Atomically save successful editorial runs and derive paragraph-aware chunks for later retrieval. |
+| `search_corpus` | Conversation-scoped LangChain tool returning ranked chunk excerpts and retrieval diagnostics. |
+| `get_draft` | Conversation-scoped LangChain tool returning one selected complete immutable artifact. |
 | Shared runtime queue and worker | Serializes Telegram and heartbeat jobs through one bounded FIFO execution boundary. |
 | Heartbeat | Collects operational queue/worker metrics and submits evaluation through the shared runtime. |
 | AdminAgent | Assesses only operational snapshots under deterministic policy; it cannot access conversation messages, prompts, identities, or drafts. |
@@ -366,6 +371,64 @@ python scripts/seed_artifact_corpus.py
 ```
 
 Use `--database PATH` or `--fixture PATH` to override the configured database or sample fixture.
+
+## Hybrid artifact retrieval
+
+Two real LangChain tools are implemented for the next conversational milestone:
+
+- `search_corpus` performs conversation-scoped hybrid search over artifact chunks.
+- `get_draft` loads one selected complete artifact by ID in the same conversation scope.
+
+They are deliberately not yet bound to Coordinator or the production LangGraph. Tool factories
+capture the validated conversation ID outside the model-visible argument schema, so the model
+cannot select or override another conversation. A draft belonging to another conversation is
+indistinguishable from a missing draft.
+
+Search first obtains eligible chunks from SQLite using the current conversation ID and inclusive
+UTC `created_from` and `created_to` filters. Both retrieval branches therefore operate over the
+same prefiltered corpus. Artifact timestamps mean when Editorial Team produced the output, not a
+date discussed inside the draft.
+
+The hybrid pipeline is:
+
+1. local `sentence-transformers/all-MiniLM-L6-v2` embeddings and exact NumPy cosine search;
+2. Unicode-aware local BM25 over the same chunks;
+3. Reciprocal Rank Fusion of both 1-based rankings;
+4. optional `cross-encoder/ms-marco-MiniLM-L6-v2` reranking;
+5. an exact ordered top-k tuple with dense, BM25, RRF, and reranker diagnostics preserved.
+
+Initial parameters are dense depth 30, BM25 depth 30, RRF constant 60, fused depth 30,
+reranking depth 15, and final top-k 5. They are starting values to evaluate in HW2, not final
+quality claims. Recency is disabled by default and, when requested, only breaks ties after active
+relevance and RRF scores.
+
+Configure the local retrieval layer with:
+
+```dotenv
+EDITORIAL_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+EDITORIAL_RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L6-v2
+EDITORIAL_RETRIEVAL_DENSE_DEPTH=30
+EDITORIAL_RETRIEVAL_BM25_DEPTH=30
+EDITORIAL_RETRIEVAL_RRF_K=60
+EDITORIAL_RETRIEVAL_FUSED_DEPTH=30
+EDITORIAL_RETRIEVAL_RERANK_DEPTH=15
+EDITORIAL_RETRIEVAL_TOP_K=5
+```
+
+After seeding the fixture, run a manual search with:
+
+```shell
+python scripts/search_artifact_corpus.py "Aurora launch" \
+  --conversation-id fixture-conversation \
+  --database runtime_data/editorial_artifacts.db \
+  --top-k 5 \
+  --rerank
+```
+
+The command also accepts `--created-from`, `--created-to`, `--prefer-recent`, and
+`--no-rerank`. The embedding and cross-encoder models run locally but may download from their
+model registry on first use. Unit tests use deterministic fakes and never initialize or download
+the real models.
 
 ## Optional heartbeat and AdminAgent
 

@@ -124,3 +124,20 @@ class ArtifactChunk:
         expected = content_sha256(self.content)
         if self.content_sha256 != expected:
             raise ValueError("content_sha256 must match content")
+
+
+@dataclass(frozen=True)
+class SearchableArtifactChunk:
+    """One stored chunk with the factual artifact metadata needed for retrieval."""
+
+    chunk: ArtifactChunk
+    task_id: str
+    user_request: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.chunk, ArtifactChunk):
+            raise ValueError("chunk must be an ArtifactChunk")
+        object.__setattr__(self, "task_id", validate_identifier(self.task_id, "task_id"))
+        object.__setattr__(
+            self, "user_request", require_non_blank(self.user_request, "user_request")
+        )
