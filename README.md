@@ -414,10 +414,11 @@ The hybrid pipeline is:
 4. optional `cross-encoder/ms-marco-MiniLM-L6-v2` reranking;
 5. an exact ordered top-k tuple with dense, BM25, RRF, and reranker diagnostics preserved.
 
-Initial parameters are dense depth 30, BM25 depth 30, RRF constant 60, fused depth 30,
-reranking depth 15, and final top-k 5. They are starting values to evaluate in HW2, not final
-quality claims. Recency is disabled by default and, when requested, only breaks ties after active
-relevance and RRF scores.
+Production parameters are dense depth 30, BM25 depth 30, RRF constant 60, fused depth 30,
+reranking depth 15, and final top-k 5. Reranking is implemented and configurable but disabled by
+default because the current measured corpus showed lower rank-one quality and no improvements.
+Explicit `rerank=true` remains supported. Recency is disabled by default and, when requested,
+only breaks ties after active relevance and RRF scores.
 
 Configure the local retrieval layer with:
 
@@ -430,6 +431,7 @@ EDITORIAL_RETRIEVAL_RRF_K=60
 EDITORIAL_RETRIEVAL_FUSED_DEPTH=30
 EDITORIAL_RETRIEVAL_RERANK_DEPTH=15
 EDITORIAL_RETRIEVAL_TOP_K=5
+EDITORIAL_RETRIEVAL_RERANK=false
 ```
 
 After seeding the fixture, run a manual search with:
@@ -556,6 +558,75 @@ Machine-readable rankings, golden IDs, metrics, stage positions, and reranking d
 `evaluation/outputs/retrieval_results.json`; the human report is in
 `evaluation/outputs/retrieval_report.md`. Generation and agent-level metrics are intentionally
 absent.
+
+## HW2 judged generation evaluation
+
+The standalone evaluation path is query → production hybrid retriever → exact ordered chunks →
+grounded Gemini answer → four separate structured Gemini judges. It does not invoke Coordinator,
+tools, Telegram, or Writer–Critic–Editor. The fixed set contains 20 objective cases across six
+transparent failure categories: missing relevant context, irrelevant/distracting context,
+incomplete multi-chunk context, unsupported claim/hallucination, near-duplicate/conflicting
+context, and out-of-corpus/required abstention. The exact Session 11 §5 category source was not
+present in the available repository or course materials, so this requested fallback mapping is
+used and documented.
+
+All 20 cases run with reranking explicitly enabled. A nine-case stratified subset runs with it
+explicitly disabled and includes the two retrieval cases worsened by reranking, exact-term,
+semantic, multi-chunk, near-duplicate, and out-of-corpus coverage. Corpus, prompts, models,
+retrieval depths, and top-k remain constant between conditions.
+
+Faithfulness judges support for every material claim; answer relevance judges direct and
+sufficient response to the query; context precision judges retrieved-context relevance and noise;
+context recall judges whether context contains everything needed for the golden answer. Each uses
+a separate fixed rubric and strict `{score, reason}` schema. The hand-rolled judge reuses the
+project's inspectable structured Gemini infrastructure without adding DeepEval or Ragas.
+
+Judge cache keys include case and metric, corpus/case hashes, hashed query, answer, retrieved and
+golden contexts, golden answer, judge model, prompt version, and scorer version. Credentials and
+reranking labels are never shown to the judge or cached. Risks remain: position bias, verbosity
+preference, same-family self-preference, judge-model mismatch, golden wording sensitivity, and
+nondeterminism. Stable context order, low-variance model defaults, fixed rubrics, hidden condition,
+version recording, caching, category reporting, and manual sampling mitigate but do not remove
+those risks.
+
+The real run used `gemini-3.1-flash-lite` for both generation and judging. This same-model choice
+is economical and consistent but increases self-preference risk. It produced 0 cache hits and 116
+misses on the first run.
+
+| Condition | Faithfulness | Answer relevance | Context precision | Context recall |
+|---|---:|---:|---:|---:|
+| rerank on, all 20 | 0.9000 | 0.8450 | 0.2225 | 0.9000 |
+| rerank on, comparison subset | 0.8889 | 0.8222 | 0.2833 | 0.8889 |
+| rerank off, comparison subset | 0.8889 | 0.8667 | 0.2889 | 0.8667 |
+
+On the matched nine-case subset, disabling reranking raised answer relevance by 0.0445 and context
+precision by 0.0056, lowered context recall by 0.0222, and left faithfulness unchanged. Three
+cases improved without reranking (`gen-003`, `gen-009`, `gen-012`), four were unchanged, and two
+worsened (`gen-004`, `gen-020`). Thus the generation comparison is mixed but does not overturn
+the retrieval evidence for keeping reranking disabled by default.
+
+The weakest category was incomplete multi-chunk context: faithfulness 0.3333, answer relevance
+0.2000, context precision 0.1333, and context recall 0.3333. In `gen-011` and `gen-013`, retrieval
+returned the golden chunk but the generator still abstained; `gen-012` received relevant context
+yet produced an incomplete/misdirected comparison. This is a clear retrieval-versus-generation
+disagreement: successful chunk retrieval did not guarantee a sufficient answer. Conversely,
+reranking changed wording or rank order in several subset cases without materially changing all
+judged dimensions.
+
+All three out-of-corpus cases correctly answered that the corpus did not provide the requested
+fact. They scored 1.0 for faithfulness, relevance, and context recall, while context precision was
+0.0 because the forced top-five retrieval consisted of unrelated chunks. This is expected without
+an abstention threshold and shows why context precision must be interpreted separately.
+
+Reproduce with:
+
+```shell
+python evaluation/generation/run_generation_eval.py
+```
+
+Optional settings are `EDITORIAL_EVAL_GENERATOR_MODEL`, `EDITORIAL_EVAL_JUDGE_MODEL`, and
+`EDITORIAL_EVAL_CACHE_PATH`. Generator and judge otherwise fall back to `AGENT_MODEL`; using the
+same Gemini family introduces self-preference risk. Cache hits avoid repeated judge calls.
 
 ## Optional heartbeat and AdminAgent
 

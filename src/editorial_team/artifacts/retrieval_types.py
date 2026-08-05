@@ -18,7 +18,7 @@ class SearchRequest:
     created_to: datetime | None = None
     prefer_recent: bool = False
     top_k: int = 5
-    rerank: bool = True
+    rerank: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "query", require_non_blank(self.query, "query"))

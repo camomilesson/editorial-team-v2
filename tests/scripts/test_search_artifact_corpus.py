@@ -56,6 +56,11 @@ def test_parser_supports_required_search_options() -> None:
     assert arguments.prefer_recent is True
 
 
+def test_parser_leaves_reranking_to_disabled_configuration_default() -> None:
+    arguments = build_parser().parse_args(["query", "--conversation-id", "conversation-1"])
+    assert arguments.rerank is None
+
+
 def test_execute_search_prints_exact_ranks_and_diagnostics() -> None:
     stream = StringIO()
     results = execute_search(

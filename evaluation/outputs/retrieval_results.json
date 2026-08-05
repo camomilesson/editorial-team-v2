@@ -4243,7 +4243,7 @@
     ],
     "reranker_model": "cross-encoder/ms-marco-MiniLM-L6-v2",
     "rrf_k": 60,
-    "run_at": "2026-08-05T10:13:56.874657+00:00",
+    "run_at": "2026-08-05T10:32:02.580907+00:00",
     "target_tokens": 700
   },
   "corpus": {

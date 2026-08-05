@@ -13,6 +13,7 @@ DEFAULT_RRF_K = 60
 DEFAULT_FUSED_DEPTH = 30
 DEFAULT_RERANK_DEPTH = 15
 DEFAULT_RETRIEVAL_TOP_K = 5
+DEFAULT_RERANK = False
 MAX_RETRIEVAL_TOP_K = 10
 
 
@@ -32,6 +33,7 @@ class RetrievalConfiguration:
     fused_depth: int = DEFAULT_FUSED_DEPTH
     rerank_depth: int = DEFAULT_RERANK_DEPTH
     top_k: int = DEFAULT_RETRIEVAL_TOP_K
+    rerank: bool = DEFAULT_RERANK
 
     def __post_init__(self) -> None:
         for field_name in ("embedding_model", "reranker_model"):
@@ -54,6 +56,8 @@ class RetrievalConfiguration:
             raise ValueError(f"top_k must not exceed {MAX_RETRIEVAL_TOP_K}")
         if not self.top_k <= self.rerank_depth <= self.fused_depth:
             raise ValueError("retrieval depths must satisfy top_k <= rerank_depth <= fused_depth")
+        if not isinstance(self.rerank, bool):
+            raise ValueError("rerank must be a boolean")
 
 
 def load_retrieval_configuration() -> RetrievalConfiguration:
@@ -69,6 +73,7 @@ def load_retrieval_configuration() -> RetrievalConfiguration:
             fused_depth=_integer("EDITORIAL_RETRIEVAL_FUSED_DEPTH", DEFAULT_FUSED_DEPTH),
             rerank_depth=_integer("EDITORIAL_RETRIEVAL_RERANK_DEPTH", DEFAULT_RERANK_DEPTH),
             top_k=_integer("EDITORIAL_RETRIEVAL_TOP_K", DEFAULT_RETRIEVAL_TOP_K),
+            rerank=_boolean("EDITORIAL_RETRIEVAL_RERANK", DEFAULT_RERANK),
         )
     except (TypeError, ValueError):
         raise RetrievalConfigurationError("Retrieval configuration is invalid") from None
@@ -84,3 +89,13 @@ def _text(name: str, default: str) -> str:
 def _integer(name: str, default: int) -> int:
     value = os.getenv(name)
     return default if value is None or not value.strip() else int(value)
+
+
+def _boolean(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    normalized = value.strip().lower()
+    if normalized not in {"true", "false"}:
+        raise ValueError("invalid boolean setting")
+    return normalized == "true"

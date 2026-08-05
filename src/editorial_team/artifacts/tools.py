@@ -32,7 +32,7 @@ class SearchCorpusInput(BaseModel):
         description="Use creation time only to break ties after relevance",
     )
     top_k: int = Field(default=5, ge=1, le=10)
-    rerank: bool = Field(default=True)
+    rerank: bool = Field(default=False)
 
 
 class GetDraftInput(BaseModel):
@@ -56,7 +56,7 @@ def build_editorial_retrieval_tools(
         created_to: str | None = None,
         prefer_recent: bool = False,
         top_k: int = 5,
-        rerank: bool = True,
+        rerank: bool = False,
     ) -> dict[str, Any]:
         try:
             lower = (

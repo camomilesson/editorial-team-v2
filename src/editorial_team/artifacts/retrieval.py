@@ -148,7 +148,7 @@ class HybridRetriever:
         created_to: datetime | None = None,
         prefer_recent: bool = False,
         top_k: int = 5,
-        rerank: bool = True,
+        rerank: bool = False,
     ) -> tuple[SearchResult, ...]:
         """Return the exact final ranking for one validated search request."""
 

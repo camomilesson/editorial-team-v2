@@ -7,6 +7,7 @@ from editorial_team.app.retrieval_config import (
     DEFAULT_DENSE_DEPTH,
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_FUSED_DEPTH,
+    DEFAULT_RERANK,
     DEFAULT_RERANK_DEPTH,
     DEFAULT_RERANKER_MODEL,
     DEFAULT_RETRIEVAL_TOP_K,
@@ -24,6 +25,7 @@ VARIABLES = (
     "EDITORIAL_RETRIEVAL_FUSED_DEPTH",
     "EDITORIAL_RETRIEVAL_RERANK_DEPTH",
     "EDITORIAL_RETRIEVAL_TOP_K",
+    "EDITORIAL_RETRIEVAL_RERANK",
 )
 
 
@@ -33,6 +35,7 @@ def test_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     value = load_retrieval_configuration()
     assert value.embedding_model == DEFAULT_EMBEDDING_MODEL
     assert value.reranker_model == DEFAULT_RERANKER_MODEL
+    assert value.rerank is DEFAULT_RERANK is False
     assert (
         value.dense_depth,
         value.bm25_depth,
@@ -59,6 +62,7 @@ def test_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("EDITORIAL_RETRIEVAL_FUSED_DEPTH", "12")
     monkeypatch.setenv("EDITORIAL_RETRIEVAL_RERANK_DEPTH", "8")
     monkeypatch.setenv("EDITORIAL_RETRIEVAL_TOP_K", "3")
+    monkeypatch.setenv("EDITORIAL_RETRIEVAL_RERANK", "true")
     value = load_retrieval_configuration()
     assert value.embedding_model == "embedding-test"
     assert value.reranker_model == "reranker-test"
@@ -66,6 +70,7 @@ def test_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert value.bm25_depth == 21
     assert value.rrf_k == 40
     assert (value.fused_depth, value.rerank_depth, value.top_k) == (12, 8, 3)
+    assert value.rerank is True
 
 
 @pytest.mark.parametrize(
@@ -79,6 +84,7 @@ def test_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
         ("EDITORIAL_RETRIEVAL_TOP_K", "11"),
         ("EDITORIAL_RETRIEVAL_RERANK_DEPTH", "4"),
         ("EDITORIAL_RETRIEVAL_FUSED_DEPTH", "10"),
+        ("EDITORIAL_RETRIEVAL_RERANK", "sometimes"),
     ],
 )
 def test_invalid_settings_are_sanitized(

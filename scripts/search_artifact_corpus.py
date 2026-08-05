@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--created-from", type=_timestamp)
     parser.add_argument("--created-to", type=_timestamp)
     parser.add_argument("--top-k", type=int)
-    parser.add_argument("--rerank", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--rerank", action=argparse.BooleanOptionalAction)
     parser.add_argument("--prefer-recent", action="store_true")
     return parser
 
@@ -114,7 +114,11 @@ def main() -> None:
             created_from=arguments.created_from,
             created_to=arguments.created_to,
             top_k=arguments.top_k or retrieval_configuration.top_k,
-            rerank=arguments.rerank,
+            rerank=(
+                retrieval_configuration.rerank
+                if arguments.rerank is None
+                else arguments.rerank
+            ),
             prefer_recent=arguments.prefer_recent,
             stream=sys.stdout,
         )

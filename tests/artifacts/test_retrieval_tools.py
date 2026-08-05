@@ -92,6 +92,7 @@ def test_tools_have_exact_names_strict_visible_schemas_and_hidden_scope(tools: t
     assert "conversation_id" not in get_schema["properties"]
     assert search_schema["additionalProperties"] is False
     assert get_schema["additionalProperties"] is False
+    assert search_schema["properties"]["rerank"]["default"] is False
     with pytest.raises(ValidationError):
         search.invoke({"query": "draft", "conversation_id": "conversation-2"})
 
@@ -155,7 +156,7 @@ def test_invalid_and_dependency_failures_are_sanitized(tmp_path: Path) -> None:
         retriever=retriever, conversation_id="conversation-1"
     )
     invalid = search.invoke({"query": " ", "created_from": "not-a-date"})
-    failed = search.invoke({"query": "visible"})
+    failed = search.invoke({"query": "visible", "rerank": True})
     assert invalid["error"]["type"] == "invalid_search_request"
     assert failed == invalid
     assert "private" not in json.dumps(failed)
