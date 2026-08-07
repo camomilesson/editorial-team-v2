@@ -12,7 +12,12 @@ from editorial_team.domain.editorial import (
     CriticReport,
     CriticVerdict,
 )
-from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
+from editorial_team.domain.routing import (
+    ClarificationReason,
+    CoordinatorDecision,
+    CoordinatorRoute,
+    TalkerContext,
+)
 from editorial_team.models import (
     ModelClient,
     ModelRequest,
@@ -56,14 +61,33 @@ def parse_coordinator_decision(text: str) -> CoordinatorDecision:
     _check_keys(
         value,
         required={"route", "confidence"},
-        optional={"task_input", "revision_instructions"},
+        optional={"task_input", "revision_instructions", "talker_context"},
     )
     try:
+        context_value = value.get("talker_context")
+        context = None
+        if context_value is not None:
+            if not isinstance(context_value, dict):
+                raise ValueError("invalid talker context")
+            _check_keys(
+                context_value,
+                required={"reason", "candidate_summaries", "recommended_question"},
+                optional=set(),
+            )
+            summaries = context_value["candidate_summaries"]
+            if not isinstance(summaries, list):
+                raise ValueError("invalid candidate summaries")
+            context = TalkerContext(
+                reason=ClarificationReason(context_value["reason"]),
+                candidate_summaries=tuple(summaries),
+                recommended_question=context_value["recommended_question"],
+            )
         return CoordinatorDecision(
             route=CoordinatorRoute(value["route"]),
             confidence=value["confidence"],
             task_input=value.get("task_input"),
             revision_instructions=value.get("revision_instructions"),
+            talker_context=context,
         )
     except (KeyError, TypeError, ValueError):
         raise AgentError("Coordinator returned invalid structured output") from None
@@ -85,7 +109,14 @@ def parse_critic_report(text: str, draft: str) -> CriticReport:
         _check_keys(
             item,
             required={"severity", "problem"},
-            optional={"location", "suggestion", "grounded_excerpt"},
+            optional={
+                "location",
+                "suggestion",
+                "grounded_excerpt",
+                "violated_requirement",
+                "input_evidence",
+                "candidate_evidence",
+            },
         )
         try:
             issue = CriticIssue(
@@ -94,6 +125,9 @@ def parse_critic_report(text: str, draft: str) -> CriticReport:
                 location=item.get("location"),
                 suggestion=item.get("suggestion"),
                 grounded_excerpt=item.get("grounded_excerpt"),
+                violated_requirement=item.get("violated_requirement"),
+                input_evidence=item.get("input_evidence"),
+                candidate_evidence=item.get("candidate_evidence"),
             )
         except (KeyError, TypeError, ValueError):
             raise AgentError("Critic returned invalid structured output") from None

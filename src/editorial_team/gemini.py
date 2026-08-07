@@ -7,6 +7,7 @@ import os
 from typing import Any
 
 from google import genai
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from editorial_team.models import (
     ModelClientError,
@@ -119,3 +120,16 @@ def create_gemini_client_from_env() -> GeminiModelClient:
 
     model = os.getenv("AGENT_MODEL", "").strip() or DEFAULT_GEMINI_MODEL
     return GeminiModelClient(model=model, api_key=api_key)
+
+
+def create_gemini_chat_model_from_env() -> ChatGoogleGenerativeAI:
+    """Create the LangChain chat adapter with the same configured Gemini model."""
+
+    provider = os.getenv("MODEL_PROVIDER", "gemini").strip().lower()
+    if provider != "gemini":
+        raise ValueError(f"Unsupported MODEL_PROVIDER {provider!r}; expected 'gemini'")
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is not configured")
+    model = os.getenv("AGENT_MODEL", "").strip() or DEFAULT_GEMINI_MODEL
+    return ChatGoogleGenerativeAI(model=model, api_key=api_key)

@@ -23,6 +23,12 @@ def format_writer_message(content: str) -> str:
     return format_agent_message("✍️ Writer", content)
 
 
+def format_retrieved_draft(content: str) -> str:
+    """Render one immutable historical draft without changing its body."""
+
+    return format_agent_message("📄 Retrieved draft", content)
+
+
 def format_critic_report(report: CriticReport) -> str:
     """Render a Critic report with readable, ordered issue fields."""
 
@@ -44,6 +50,12 @@ def format_critic_report(report: CriticReport) -> str:
             fields.append(f"Suggestion: {issue.suggestion}")
         if issue.grounded_excerpt is not None:
             fields.append(f"Grounded excerpt: {issue.grounded_excerpt}")
+        if issue.violated_requirement is not None:
+            fields.append(f"Violated requirement: {issue.violated_requirement}")
+        if issue.input_evidence is not None:
+            fields.append(f"Input evidence: {issue.input_evidence}")
+        if issue.candidate_evidence is not None:
+            fields.append(f"Candidate evidence: {issue.candidate_evidence}")
         issue_sections.append("\n\n".join(fields))
     sections.append("Issues:\n\n" + "\n\n".join(issue_sections))
     return format_agent_message("Critic", "\n\n".join(sections))

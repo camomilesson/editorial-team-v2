@@ -17,6 +17,15 @@ class WritingTaskStatus(StrEnum):
     DRAFTED = "drafted"
     REVIEWED = "reviewed"
     REVISED = "revised"
+    RETRIEVED = "retrieved"
+
+
+class EditorialOperation(StrEnum):
+    """How one immutable editorial run was initiated."""
+
+    NEW_TASK = "new_task"
+    ACTIVE_REVISION = "active_revision"
+    HISTORICAL_TRANSFORMATION = "historical_transformation"
 
 
 @dataclass(frozen=True)
@@ -67,12 +76,22 @@ class CriticIssue:
     location: str | None = None
     suggestion: str | None = None
     grounded_excerpt: str | None = None
+    violated_requirement: str | None = None
+    input_evidence: str | None = None
+    candidate_evidence: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.severity, CriticIssueSeverity):
             raise ValueError("severity must be a CriticIssueSeverity")
         object.__setattr__(self, "problem", require_non_blank(self.problem, "problem"))
-        for field_name in ("location", "suggestion", "grounded_excerpt"):
+        for field_name in (
+            "location",
+            "suggestion",
+            "grounded_excerpt",
+            "violated_requirement",
+            "input_evidence",
+            "candidate_evidence",
+        ):
             value = getattr(self, field_name)
             if value is not None:
                 object.__setattr__(self, field_name, require_non_blank(value, field_name))
@@ -166,6 +185,7 @@ class WritingTask:
             WritingTaskStatus.DRAFTED,
             WritingTaskStatus.REVIEWED,
             WritingTaskStatus.REVISED,
+            WritingTaskStatus.RETRIEVED,
         }
         reviewed_statuses = {
             WritingTaskStatus.REVIEWED,
@@ -175,3 +195,43 @@ class WritingTask:
             raise ValueError(f"{self.status.value} tasks require working_draft")
         if self.status in reviewed_statuses and self.critic_report is None:
             raise ValueError(f"{self.status.value} tasks require critic_report")
+
+
+@dataclass(frozen=True)
+class EditorialRunContext:
+    """Canonical immutable task ownership shared by one editorial run."""
+
+    turn_id: str
+    operation: EditorialOperation
+    task: WritingTask
+    current_instruction: str
+    retrieved_artifact_id: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "turn_id", validate_identifier(self.turn_id, "turn_id"))
+        if not isinstance(self.operation, EditorialOperation):
+            raise ValueError("operation must be an EditorialOperation")
+        if not isinstance(self.task, WritingTask):
+            raise ValueError("task must be a WritingTask")
+        object.__setattr__(
+            self,
+            "current_instruction",
+            require_non_blank(self.current_instruction, "current_instruction"),
+        )
+        if self.retrieved_artifact_id is not None:
+            object.__setattr__(
+                self,
+                "retrieved_artifact_id",
+                validate_identifier(self.retrieved_artifact_id, "retrieved_artifact_id"),
+            )
+        if self.operation is EditorialOperation.HISTORICAL_TRANSFORMATION:
+            if self.retrieved_artifact_id is None or self.task.working_draft is None:
+                raise ValueError("historical transformation requires a retrieved draft")
+        elif self.retrieved_artifact_id is not None:
+            raise ValueError("only historical transformations may identify a retrieved artifact")
+
+    @property
+    def run_id(self) -> str:
+        """Use the fresh task ID as the stable identity of this editorial run."""
+
+        return self.task.id

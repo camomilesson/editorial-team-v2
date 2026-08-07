@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from editorial_team.domain.editorial import CriticIssueSeverity, CriticVerdict
-from editorial_team.domain.routing import CoordinatorRoute
+from editorial_team.domain.routing import ClarificationReason, CoordinatorRoute
 from editorial_team.models import StructuredOutputSpec
 from editorial_team.operations.models import AdminDecision, AdminReasonCode
 
@@ -16,8 +16,32 @@ COORDINATOR_DECISION_SCHEMA: dict[str, Any] = {
     "properties": {
         "route": {"type": "string", "enum": [route.value for route in CoordinatorRoute]},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-        "task_input": {"type": ["string", "null"], "minLength": 1},
+        "task_input": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "description": (
+                "User's writing request, or after historical retrieval the user's edit "
+                "instruction; never model-authored replacement draft content."
+            ),
+        },
         "revision_instructions": {"type": ["string", "null"], "minLength": 1},
+        "talker_context": {
+            "type": ["object", "null"],
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "enum": [reason.value for reason in ClarificationReason],
+                },
+                "candidate_summaries": {
+                    "type": "array",
+                    "items": {"type": "string", "minLength": 1},
+                    "maxItems": 5,
+                },
+                "recommended_question": {"type": "string", "minLength": 1},
+            },
+            "required": ["reason", "candidate_summaries", "recommended_question"],
+            "additionalProperties": False,
+        },
     },
     "required": ["route", "confidence"],
     "additionalProperties": False,
@@ -44,6 +68,12 @@ CRITIC_REPORT_SCHEMA: dict[str, Any] = {
                     "problem": {"type": "string", "minLength": 1},
                     "suggestion": {"type": ["string", "null"], "minLength": 1},
                     "grounded_excerpt": {"type": ["string", "null"], "minLength": 1},
+                    "violated_requirement": {
+                        "type": ["string", "null"],
+                        "minLength": 1,
+                    },
+                    "input_evidence": {"type": ["string", "null"], "minLength": 1},
+                    "candidate_evidence": {"type": ["string", "null"], "minLength": 1},
                 },
                 "required": ["severity", "problem"],
                 "additionalProperties": False,

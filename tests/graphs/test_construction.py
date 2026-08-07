@@ -41,14 +41,17 @@ class UnusedTalker:
         raise AssertionError("construction must not invoke Talker")
 
 
+class UnusedArtifactStore:
+    def save_run(self, artifacts: object) -> None:
+        del artifacts
+        raise AssertionError("construction must not persist artifacts")
+
+
 def parent_builder(
     decision: CoordinatorDecision | None = None,
 ) -> object:
     return build_parent_graph(
-        coordinator=StaticCoordinator(
-            decision
-            or CoordinatorDecision(CoordinatorRoute.CHAT, 1.0)
-        ),
+        coordinator=StaticCoordinator(decision or CoordinatorDecision(CoordinatorRoute.CHAT, 1.0)),
         talker=UnusedTalker(),
         identifier_generator=lambda: "message-1",
         clock=lambda: datetime.now(UTC),
@@ -56,6 +59,7 @@ def parent_builder(
         critic=UnusedCritic(),
         editor=UnusedEditor(),
         max_recent_messages=20,
+        artifact_store=UnusedArtifactStore(),
     )
 
 
@@ -68,12 +72,14 @@ def test_parent_graph_contains_planned_foundation_nodes() -> None:
     assert _node_names(parent_builder()) == {
         "__start__",
         "validate_and_prepare_turn",
-        "coordinator",
+        "coordinator_agent",
+        "coordinator_tools",
         "talker",
         "prepare_new_task",
         "prepare_revision",
         "editorial_subgraph",
         "finalize_task",
+        "persist_editorial_artifacts",
         "finalize_turn",
         "__end__",
     }
@@ -82,20 +88,21 @@ def test_parent_graph_contains_planned_foundation_nodes() -> None:
 def test_parent_graph_preserves_planned_topology() -> None:
     graph = parent_builder().compile().get_graph()  # type: ignore[attr-defined]
 
-    assert {
-        (edge.source, edge.target, edge.conditional)
-        for edge in graph.edges
-    } == {
+    assert {(edge.source, edge.target, edge.conditional) for edge in graph.edges} == {
         ("__start__", "validate_and_prepare_turn", False),
-        ("validate_and_prepare_turn", "coordinator", False),
-        ("coordinator", "talker", True),
-        ("coordinator", "prepare_new_task", True),
-        ("coordinator", "prepare_revision", True),
+        ("validate_and_prepare_turn", "coordinator_agent", False),
+        ("coordinator_agent", "coordinator_tools", True),
+        ("coordinator_agent", "talker", True),
+        ("coordinator_agent", "prepare_new_task", True),
+        ("coordinator_agent", "prepare_revision", True),
+        ("coordinator_agent", "finalize_turn", True),
+        ("coordinator_tools", "coordinator_agent", False),
         ("talker", "finalize_turn", False),
         ("prepare_new_task", "editorial_subgraph", False),
         ("prepare_revision", "editorial_subgraph", False),
         ("editorial_subgraph", "finalize_task", False),
-        ("finalize_task", "finalize_turn", False),
+        ("finalize_task", "persist_editorial_artifacts", False),
+        ("persist_editorial_artifacts", "__end__", False),
         ("finalize_turn", "__end__", False),
     }
 
@@ -119,16 +126,17 @@ def test_editorial_subgraph_contains_planned_foundation_nodes() -> None:
 
 
 def test_editorial_subgraph_preserves_planned_topology() -> None:
-    graph = build_editorial_subgraph(
-        writer=UnusedWriter(),
-        critic=UnusedCritic(),
-        editor=UnusedEditor(),
-    ).compile().get_graph()
+    graph = (
+        build_editorial_subgraph(
+            writer=UnusedWriter(),
+            critic=UnusedCritic(),
+            editor=UnusedEditor(),
+        )
+        .compile()
+        .get_graph()
+    )
 
-    assert {
-        (edge.source, edge.target, edge.conditional)
-        for edge in graph.edges
-    } == {
+    assert {(edge.source, edge.target, edge.conditional) for edge in graph.edges} == {
         ("__start__", "writer", False),
         ("writer", "critic", False),
         ("critic", "build_pass_result", True),

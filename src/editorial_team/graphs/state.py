@@ -2,8 +2,16 @@
 
 from typing import Literal, Required, TypedDict
 
+from langchain_core.messages import BaseMessage
+
+from editorial_team.artifacts.retrieval_types import RetrievedDraft
 from editorial_team.domain.conversation import ConversationState, Message
-from editorial_team.domain.editorial import CriticReport, EditorialResult, WritingTask
+from editorial_team.domain.editorial import (
+    CriticReport,
+    EditorialResult,
+    EditorialRunContext,
+    WritingTask,
+)
 from editorial_team.domain.routing import CoordinatorDecision
 
 EDITORIAL_GRAPH_STATE_VERSION = 1
@@ -28,11 +36,18 @@ class EditorialGraphStateV1(TypedDict, total=False):
     decision: CoordinatorDecision | None
     talker_response: str | None
     writing_task: WritingTask | None
+    editorial_run_context: EditorialRunContext | None
+    writer_run_id: str | None
+    critic_run_id: str | None
     writer_output: str | None
     critic_report: CriticReport | None
     working_draft: str | None
     editorial_result: EditorialResult | None
     assistant_messages: tuple[Message, ...] | None
+    coordinator_messages: tuple[BaseMessage, ...] | None
+    coordinator_tool_steps: int | None
+    coordinator_search_completed: bool | None
+    retrieved_draft: RetrievedDraft | None
 
 
 class GraphStateVersionError(ValueError):

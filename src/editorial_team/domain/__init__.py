@@ -10,15 +10,23 @@ from editorial_team.domain.editorial import (
     CriticIssueSeverity,
     CriticReport,
     CriticVerdict,
+    EditorialOperation,
     EditorialResult,
+    EditorialRunContext,
     WritingBrief,
     WritingTask,
     WritingTaskStatus,
 )
-from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
+from editorial_team.domain.routing import (
+    ClarificationReason,
+    CoordinatorDecision,
+    CoordinatorRoute,
+    TalkerContext,
+)
 
 __all__ = [
     "ConversationState",
+    "ClarificationReason",
     "CoordinatorDecision",
     "CoordinatorRoute",
     "CriticIssue",
@@ -26,9 +34,12 @@ __all__ = [
     "CriticReport",
     "CriticVerdict",
     "EditorialResult",
+    "EditorialOperation",
+    "EditorialRunContext",
     "Message",
     "MessageRole",
     "WritingBrief",
     "WritingTask",
     "WritingTaskStatus",
+    "TalkerContext",
 ]

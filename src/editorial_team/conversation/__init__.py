@@ -4,6 +4,7 @@ from editorial_team.conversation.formatting import (
     format_agent_message,
     format_critic_report,
     format_editor_message,
+    format_retrieved_draft,
     format_talker_message,
     format_writer_message,
 )
@@ -21,6 +22,7 @@ __all__ = [
     "format_agent_message",
     "format_critic_report",
     "format_editor_message",
+    "format_retrieved_draft",
     "format_talker_message",
     "format_writer_message",
 ]

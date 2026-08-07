@@ -5,12 +5,15 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
+from editorial_team.artifacts import ParagraphChunker, SQLiteArtifactStore
 from editorial_team.conversation import ConversationService, ConversationServiceError
 from editorial_team.domain.conversation import ConversationState, Message
 from editorial_team.domain.editorial import (
@@ -18,6 +21,7 @@ from editorial_team.domain.editorial import (
     CriticIssueSeverity,
     CriticReport,
     CriticVerdict,
+    EditorialRunContext,
     WritingTask,
 )
 from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
@@ -70,8 +74,11 @@ class Talker:
 @dataclass
 class Writer:
     calls: list[WritingTask] = field(default_factory=list)
+    contexts: list[EditorialRunContext] = field(default_factory=list)
 
-    def write(self, task: WritingTask) -> str:
+    def write(self, context: EditorialRunContext) -> str:
+        self.contexts.append(context)
+        task = context.task
         self.calls.append(task)
         instruction = task.brief.instructions[-1] if task.brief.instructions else "initial"
         return f"{task.brief.original_request}|{instruction}"
@@ -81,23 +88,40 @@ class Writer:
 class Critic:
     verdict: CriticVerdict = CriticVerdict.PASS
     calls: int = 0
+    contexts: list[EditorialRunContext] = field(default_factory=list)
 
-    def review(self, task: WritingTask, draft: str) -> CriticReport:
+    def review(self, context: EditorialRunContext, draft: str) -> CriticReport:
+        self.contexts.append(context)
         self.calls += 1
         if self.verdict is CriticVerdict.PASS:
             return CriticReport(CriticVerdict.PASS, "Approved.")
         return CriticReport(
             CriticVerdict.REVISE,
             "Revise.",
-            (CriticIssue(CriticIssueSeverity.MAJOR, "Improve it."),),
+            (
+                CriticIssue(
+                    CriticIssueSeverity.MAJOR,
+                    "Improve it.",
+                    violated_requirement=context.current_instruction,
+                    input_evidence="The input draft contains the material to improve.",
+                    candidate_evidence="The candidate still needs the requested improvement.",
+                ),
+            ),
         )
 
 
 @dataclass
 class Editor:
     calls: int = 0
+    contexts: list[EditorialRunContext] = field(default_factory=list)
 
-    def revise(self, task: WritingTask, draft: str, report: CriticReport) -> str:
+    def revise(
+        self,
+        context: EditorialRunContext,
+        draft: str,
+        report: CriticReport,
+    ) -> str:
+        self.contexts.append(context)
         self.calls += 1
         return f"edited:{draft}"
 
@@ -115,6 +139,7 @@ class Actors:
 class ComposedService:
     service: ConversationService
     runner: object
+    artifact_store: SQLiteArtifactStore
 
     def process_message(self, conversation_id: str, text: str) -> tuple[Message, ...]:
         return self.service.process_message(conversation_id, text)
@@ -128,23 +153,34 @@ def service_for(
     actors: Actors,
     *,
     busy_timeout_seconds: float = 5.0,
+    identifier_generator: Callable[[], str] | None = None,
 ) -> ComposedService:
-    saver, close = create_sqlite_checkpointer(
-        database, busy_timeout_seconds=busy_timeout_seconds
+    saver, close = create_sqlite_checkpointer(database, busy_timeout_seconds=busy_timeout_seconds)
+    artifact_store = SQLiteArtifactStore(
+        database.with_name(f"{database.stem}-artifacts.db"),
+        chunker=ParagraphChunker(),
     )
+    artifact_store.initialize()
     graph = build_parent_graph(
         coordinator=actors.coordinator,
         talker=actors.talker,
         writer=actors.writer,
         critic=actors.critic,
         editor=actors.editor,
-        identifier_generator=Ids(),
+        identifier_generator=identifier_generator or (lambda: uuid4().hex),
         clock=lambda: NOW,
         max_recent_messages=50,
+        artifact_store=artifact_store,
     ).compile(checkpointer=saver)
+
+    def close_all() -> None:
+        close()
+        artifact_store.close()
+
     return ComposedService(
-        ConversationService(graph_runner=graph, close_checkpointer=close),
+        ConversationService(graph_runner=graph, close_checkpointer=close_all),
         graph,
+        artifact_store,
     )
 
 
@@ -171,7 +207,7 @@ def test_same_thread_continues_chat_task_revision_and_replacement(tmp_path: Path
     service.process_message("telegram-chat-1", "revise shorter")
     revised = conversation(service, "telegram-chat-1")
     assert revised.active_task is not None
-    assert revised.active_task.id == first_id
+    assert revised.active_task.id != first_id
     assert revised.active_task.brief.instructions == ("shorter",)
     assert actors.writer.calls[-1].working_draft == "first post|initial"
     service.process_message("telegram-chat-1", "write second post")
@@ -220,7 +256,7 @@ def test_restart_recovers_task_and_revision_context(tmp_path: Path) -> None:
     second.process_message("telegram-chat-1", "revise warmer")
     restored = conversation(second, "telegram-chat-1")
     assert restored.active_task is not None
-    assert restored.active_task.id == task_id
+    assert restored.active_task.id != task_id
     assert restored.active_task.brief.instructions == ("warmer",)
     assert second_actors.writer.calls[0].working_draft == "persistent draft|initial"
     second.close()
@@ -232,6 +268,74 @@ def test_critic_controls_editor_execution(tmp_path: Path) -> None:
     service.process_message("telegram-chat-1", "write pass")
     assert passing.critic.calls == 1
     assert passing.editor.calls == 0
+    artifacts = service.artifact_store.list_artifacts()
+    assert len(artifacts) == 1
+    assert artifacts[0].producer.value == "writer"
+    assert artifacts[0].user_request == "pass"
+    service.close()
+
+
+def test_completed_editorial_runs_store_exact_participants_and_new_run_ids(
+    tmp_path: Path,
+) -> None:
+    actors = Actors()
+    actors.critic.verdict = CriticVerdict.REVISE
+    service = service_for(tmp_path / "artifacts.db", actors)
+    service.process_message("telegram-chat-1", "hello")
+    assert service.artifact_store.list_artifacts() == ()
+
+    service.process_message("telegram-chat-1", "write launch note")
+    first = service.artifact_store.list_artifacts()
+    assert {artifact.producer.value for artifact in first} == {"editor", "writer"}
+    assert len({artifact.task_id for artifact in first}) == 1
+    assert {artifact.user_request for artifact in first} == {"launch note"}
+
+    service.process_message("telegram-chat-1", "revise shorter")
+    all_artifacts = service.artifact_store.list_artifacts()
+    assert len(all_artifacts) == 4
+    run_ids = {artifact.task_id for artifact in all_artifacts}
+    assert len(run_ids) == 2
+    revision = [artifact for artifact in all_artifacts if artifact.user_request == "shorter"]
+    assert {artifact.producer.value for artifact in revision} == {"editor", "writer"}
+    assert len({artifact.task_id for artifact in revision}) == 1
+    service.close()
+
+
+def test_artifact_persistence_failure_does_not_finalize_turn(tmp_path: Path) -> None:
+    actors = Actors()
+    service = service_for(tmp_path / "persistence-failure.db", actors)
+    original = service.artifact_store.save_run
+
+    def fail(artifacts: object) -> None:
+        del artifacts
+        raise RuntimeError("private database detail")
+
+    service.artifact_store.save_run = fail  # type: ignore[method-assign]
+    with pytest.raises(ConversationServiceError, match="artifacts could not be saved"):
+        service.process_message("telegram-chat-1", "write unsaved")
+    assert service.artifact_store.list_artifacts() == ()
+    service.artifact_store.save_run = original  # type: ignore[method-assign]
+    service.process_message("telegram-chat-1", "write recovered")
+    assert len(service.artifact_store.list_artifacts()) == 1
+    service.close()
+
+
+def test_final_turn_assembly_failure_saves_no_artifacts(tmp_path: Path) -> None:
+    identifiers = Ids()
+
+    def fail_during_assistant_messages() -> str:
+        if identifiers.value == 3:
+            raise RuntimeError("identifier unavailable")
+        return identifiers()
+
+    service = service_for(
+        tmp_path / "finalization-failure.db",
+        Actors(),
+        identifier_generator=fail_during_assistant_messages,
+    )
+    with pytest.raises(ConversationServiceError):
+        service.process_message("telegram-chat-1", "write unsaved")
+    assert service.artifact_store.list_artifacts() == ()
     service.close()
 
 
@@ -291,6 +395,7 @@ def test_failed_new_task_preserves_previous_active_task_and_later_turn_recovers(
     actors = Actors()
     service = service_for(tmp_path / f"{participant}-{malformed}.db", actors)
     service.process_message("telegram-chat-1", "write canonical")
+    artifact_count = len(service.artifact_store.list_artifacts())
     original = getattr(actors, participant)
     method_name = "write" if participant == "writer" else "review"
     original_method = getattr(original, method_name)
@@ -304,6 +409,7 @@ def test_failed_new_task_preserves_previous_active_task_and_later_turn_recovers(
     setattr(original, method_name, fail)
     with pytest.raises(ConversationServiceError):
         service.process_message("telegram-chat-1", "write replacement")
+    assert len(service.artifact_store.list_artifacts()) == artifact_count
     setattr(original, method_name, original_method)
 
     service.process_message("telegram-chat-1", "recovered chat")
@@ -320,6 +426,7 @@ def test_failed_editor_preserves_canonical_draft_and_later_turn_recovers(
     actors = Actors()
     service = service_for(tmp_path / f"editor-{malformed}.db", actors)
     service.process_message("telegram-chat-1", "write canonical")
+    artifact_count = len(service.artifact_store.list_artifacts())
     actors.critic.verdict = CriticVerdict.REVISE
     original = actors.editor.revise
 
@@ -332,6 +439,7 @@ def test_failed_editor_preserves_canonical_draft_and_later_turn_recovers(
     actors.editor.revise = fail  # type: ignore[method-assign]
     with pytest.raises(ConversationServiceError):
         service.process_message("telegram-chat-1", "revise shorter")
+    assert len(service.artifact_store.list_artifacts()) == artifact_count
     actors.editor.revise = original  # type: ignore[method-assign]
 
     service.process_message("telegram-chat-1", "recovered chat")

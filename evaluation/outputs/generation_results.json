@@ -1,0 +1,1318 @@
+{
+  "cache": {
+    "hits": 76,
+    "misses": 40
+  },
+  "case_count": 20,
+  "case_set_sha256": "19b50e9b6666f18006c517b76b44040545562c588c5d368423c5e57e4e26d5b6",
+  "comparison": {
+    "improved": [
+      "gen-009"
+    ],
+    "per_case": {
+      "gen-001": 0.0,
+      "gen-003": 0.0,
+      "gen-004": -0.025000000000000022,
+      "gen-007": 0.0,
+      "gen-009": 0.03749999999999998,
+      "gen-011": 0.0,
+      "gen-012": -0.07499999999999996,
+      "gen-017": 0.0,
+      "gen-020": -0.050000000000000044
+    },
+    "unchanged": [
+      "gen-001",
+      "gen-003",
+      "gen-007",
+      "gen-011",
+      "gen-017"
+    ],
+    "worsened": [
+      "gen-004",
+      "gen-012",
+      "gen-020"
+    ]
+  },
+  "conditions": {
+    "off": {
+      "case_ids": [
+        "gen-001",
+        "gen-003",
+        "gen-004",
+        "gen-007",
+        "gen-009",
+        "gen-011",
+        "gen-012",
+        "gen-017",
+        "gen-020"
+      ],
+      "cases": [
+        {
+          "candidate_answer": "The QuasarEdge controller identifier is QX-417.",
+          "case_id": "gen-001",
+          "expected_out_of_corpus": false,
+          "failure_category": "missing_relevant_context",
+          "golden_answer": "The controller identifier was QX-417.",
+          "golden_chunk_ids": [
+            "chunk-v1-2743cefb0ced9c3d23e32eabf6e88f109e166def113b1bdaae4400c32e5bc574"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer directly provides the requested identifier without any unnecessary information.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Only one out of the five retrieved chunks contains relevant information; the other four chunks are irrelevant noise.",
+              "score": 0.2
+            },
+            "context_recall": {
+              "reason": "The retrieved context contains the exact identifier (QX-417) required to answer the query.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The retrieved context explicitly confirms that the QuasarEdge controller is named QX-417.",
+              "score": 1.0
+            }
+          },
+          "query": "What identifier did the QuasarEdge controller use?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-2743cefb0ced9c3d23e32eabf6e88f109e166def113b1bdaae4400c32e5bc574",
+            "chunk-v1-91f30d9ee2ae93767ea549a7196c085c8e47185718d9592c919b604d182a72a6",
+            "chunk-v1-a54bffd9daf87089ff60bd93a8aa568186044899b7290a9c8eb24c5c2b2e60ac",
+            "chunk-v1-b1a5d9915d02c867e2b7b5ed7ffbdb7b3cf72312509fd256ef36673fca62addb",
+            "chunk-v1-265c5cb2688794b4b9bceed2b86cb7024cade0ce4a4ea66a0db46871cbf0f89f"
+          ],
+          "tags": [
+            "exact_term",
+            "named_entity"
+          ]
+        },
+        {
+          "candidate_answer": "Aurora launches on 12 January and includes downloadable city maps.",
+          "case_id": "gen-003",
+          "expected_out_of_corpus": false,
+          "failure_category": "near_duplicate_conflicting_context",
+          "golden_answer": "Aurora launches on 12 January and includes downloadable offline city maps.",
+          "golden_chunk_ids": [
+            "chunk-v1-cb8453ee7b28ec20b3f97e4e505c648d2e3c8dfb3886e89d56214cdf8558f309"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer provides the correct launch date and mentions the maps, but fails to explicitly label them as 'offline' maps, which was a specific part of the query.",
+              "score": 0.8
+            },
+            "context_precision": {
+              "reason": "Two retrieved chunks are highly relevant, but three chunks contain unrelated noise about trail maps and logistics, reducing precision.",
+              "score": 0.6
+            },
+            "context_recall": {
+              "reason": "The retrieved contexts explicitly state the launch date is 12 January and confirm the inclusion of offline city maps.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer accurately reflects the launch date and feature details provided in the retrieved context.",
+              "score": 1.0
+            }
+          },
+          "query": "When does Aurora launch and what offline feature is included?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-89f0d47369ae232a3073868195fd229a4c1908284ea6aa4be099b5bd2a983218",
+            "chunk-v1-cb8453ee7b28ec20b3f97e4e505c648d2e3c8dfb3886e89d56214cdf8558f309",
+            "chunk-v1-a54bffd9daf87089ff60bd93a8aa568186044899b7290a9c8eb24c5c2b2e60ac",
+            "chunk-v1-4a42549ab57d4d03b322f1d45c2feefec8a6c3396e64ad7525f52b00bb421f12",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008"
+          ],
+          "tags": [
+            "near_duplicate",
+            "named_entity"
+          ]
+        },
+        {
+          "candidate_answer": "Aurora protects location information by using privacy-first location controls and keeping location history private.",
+          "case_id": "gen-004",
+          "expected_out_of_corpus": false,
+          "failure_category": "irrelevant_distracting_context",
+          "golden_answer": "Aurora keeps location history private through privacy-first location controls.",
+          "golden_chunk_ids": [
+            "chunk-v1-cb8453ee7b28ec20b3f97e4e505c648d2e3c8dfb3886e89d56214cdf8558f309"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer accurately synthesizes the information from the retrieved contexts to explain how Aurora protects location information.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Only two out of the five retrieved chunks are relevant to Aurora's privacy features; the remaining chunks constitute noise as they discuss unrelated products or general logistics.",
+              "score": 0.4
+            },
+            "context_recall": {
+              "reason": "The retrieved contexts explicitly contain both 'privacy-first location controls' and the fact that Aurora 'keeps location history private', which together provide all necessary information to support the golden answer.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer accurately synthesizes the information from the provided contexts, which confirm both the use of privacy-first location controls and the commitment to keeping location history private.",
+              "score": 1.0
+            }
+          },
+          "query": "How does the prior night travel product protect location information?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-89f0d47369ae232a3073868195fd229a4c1908284ea6aa4be099b5bd2a983218",
+            "chunk-v1-cb8453ee7b28ec20b3f97e4e505c648d2e3c8dfb3886e89d56214cdf8558f309",
+            "chunk-v1-4a42549ab57d4d03b322f1d45c2feefec8a6c3396e64ad7525f52b00bb421f12",
+            "chunk-v1-a54bffd9daf87089ff60bd93a8aa568186044899b7290a9c8eb24c5c2b2e60ac",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008"
+          ],
+          "tags": [
+            "semantic_paraphrase"
+          ]
+        },
+        {
+          "candidate_answer": "Meridian Labs gained predictive planning for global supply chains and expanded its supply-chain forecasting capabilities.",
+          "case_id": "gen-007",
+          "expected_out_of_corpus": false,
+          "failure_category": "near_duplicate_conflicting_context",
+          "golden_answer": "Meridian gained stronger predictive supply-chain planning and forecasting capabilities.",
+          "golden_chunk_ids": [
+            "chunk-v1-0a97a57f52f85cb54123b6f634fa3e1c80c83c2661b80a9d98242099bfd25271"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer accurately summarizes the capabilities gained by Meridian based on the provided context.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Two of the five retrieved chunks contain relevant information, while the remaining three chunks are noise unrelated to the query.",
+              "score": 0.4
+            },
+            "context_recall": {
+              "reason": "The retrieved contexts contain all the information necessary to answer the query, specifically mentioning predictive planning for global supply chains and expanded supply-chain forecasting capabilities.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer accurately reflects the information provided in the retrieved contexts, specifically the mention of predictive planning and expanded supply-chain forecasting capabilities.",
+              "score": 1.0
+            }
+          },
+          "query": "What capability did Meridian gain from Northstar?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-0a97a57f52f85cb54123b6f634fa3e1c80c83c2661b80a9d98242099bfd25271",
+            "chunk-v1-fc436dda4255c3a8f5e60cb7ac9063e0aad3b69fe015bc1137e8bee3ff0c94b5",
+            "chunk-v1-d04ef378c55908e48f14d1dbb3c4715571e67093baa92025d21755a5a90a0c3b",
+            "chunk-v1-91f30d9ee2ae93767ea549a7196c085c8e47185718d9592c919b604d182a72a6",
+            "chunk-v1-9d79bf44b72e492c68c9e17fdab21e328a7dc706b1340ec8fe5e0e7a35c1e8c4"
+          ],
+          "tags": [
+            "near_duplicate",
+            "semantic_paraphrase"
+          ]
+        },
+        {
+          "candidate_answer": "Speakers emphasized incident drills, traceable decisions, and governance that product teams can actually follow.",
+          "case_id": "gen-009",
+          "expected_out_of_corpus": false,
+          "failure_category": "near_duplicate_conflicting_context",
+          "golden_answer": "They emphasized incident drills, traceable decisions, and practical governance product teams can follow.",
+          "golden_chunk_ids": [
+            "chunk-v1-91f30d9ee2ae93767ea549a7196c085c8e47185718d9592c919b604d182a72a6"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The candidate answer directly and accurately addresses the query using information provided in the context.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Only one out of five retrieved chunks is relevant; the other four chunks are unrelated noise.",
+              "score": 0.4
+            },
+            "context_recall": {
+              "reason": "The retrieved context contains all the necessary information to answer the question, as the text explicitly lists incident drills, traceable decisions, and practical governance.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer accurately reflects the content provided in the retrieved context regarding what the speakers emphasized.",
+              "score": 1.0
+            }
+          },
+          "query": "What did Riverstone speakers emphasize after the summit?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-91f30d9ee2ae93767ea549a7196c085c8e47185718d9592c919b604d182a72a6",
+            "chunk-v1-a2e3fe58b62106ac10acb02fa96609e743dbbb2fabc6a1c08b38306331d5477b",
+            "chunk-v1-265c5cb2688794b4b9bceed2b86cb7024cade0ce4a4ea66a0db46871cbf0f89f",
+            "chunk-v1-a54bffd9daf87089ff60bd93a8aa568186044899b7290a9c8eb24c5c2b2e60ac",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008"
+          ],
+          "tags": [
+            "recency",
+            "semantic_paraphrase"
+          ]
+        },
+        {
+          "candidate_answer": "The corpus does not provide the answer.",
+          "case_id": "gen-011",
+          "expected_out_of_corpus": false,
+          "failure_category": "incomplete_multi_chunk_context",
+          "golden_answer": "Use modular, maintainable robotics that support safe human interaction and flexible seasonal throughput without rebuilding entire sites.",
+          "golden_chunk_ids": [
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The candidate answer incorrectly claims the information is not in the corpus. The provided context contains a section titled 'Warehouse automation' which explicitly details the recommendation.",
+              "score": 0.0
+            },
+            "context_precision": {
+              "reason": "None of the retrieved chunks contain the section on warehouse automation; the first chunk cuts off before reaching that content, and the other chunks are irrelevant to the query.",
+              "score": 0.0
+            },
+            "context_recall": {
+              "reason": "The retrieved chunks do not contain the section regarding warehouse automation. The relevant information was in the original context but was truncated in the provided retrieved chunks.",
+              "score": 0.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer incorrectly states that the corpus does not provide the answer, whereas the provided context contains a specific section on 'Warehouse automation' that details the recommendation.",
+              "score": 0.0
+            }
+          },
+          "query": "Summarize the warehouse automation recommendation.",
+          "retrieved_chunk_ids": [
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-fc436dda4255c3a8f5e60cb7ac9063e0aad3b69fe015bc1137e8bee3ff0c94b5",
+            "chunk-v1-8634b156eadae61a124be55438531a9bf77483d54b35715eb48f173d638a5e85",
+            "chunk-v1-a54bffd9daf87089ff60bd93a8aa568186044899b7290a9c8eb24c5c2b2e60ac",
+            "chunk-v1-b1a5d9915d02c867e2b7b5ed7ffbdb7b3cf72312509fd256ef36673fca62addb"
+          ],
+          "tags": [
+            "long_document",
+            "semantic_paraphrase"
+          ]
+        },
+        {
+          "candidate_answer": "Regarding inventory, the report recommends that operators connect commercial priorities with operational signals rather than applying the same inventory policy everywhere, and that they reserve capacity where substitution is genuinely difficult.\n\nRegarding supplier risk, the report notes that regionalization is not automatic simplification, as local networks can still depend on imported materials, specialist tools, concentrated energy infrastructure, or single transport corridors. Consequently, decision makers are advised to trace several tiers of dependency and compare recovery characteristics rather than relying solely on geographic distance from customers.",
+          "case_id": "gen-012",
+          "expected_out_of_corpus": false,
+          "failure_category": "incomplete_multi_chunk_context",
+          "golden_answer": "Supplier risk combines operational warning signs with qualified alternative capacity; inventory strategy segments buffers by volatility, substitution, replenishment time, and exposure.",
+          "golden_chunk_ids": [
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer accurately reflects the report's recommendations for both topics, though it slightly misattributes the 'regionalization' advice (which appears in the report) to the 'supplier risk' section, despite them being distinct segments in the source text.",
+              "score": 0.9
+            },
+            "context_precision": {
+              "reason": "The retrieved context contains relevant information about inventory and supplier risk (specifically in the first two chunks), but also includes three noise chunks that are entirely irrelevant to the query.",
+              "score": 0.6
+            },
+            "context_recall": {
+              "reason": "The retrieved chunks provide all necessary information regarding inventory segmentation (volatility, substitution, etc.) and supplier risk management (financial/operational indicators, dual sourcing with qualified capacity) to construct the golden answer.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The answer correctly summarizes the inventory recommendations found in the context. However, the supplier risk section describes general concepts from the context (regionalization), but misses the report's specific advice on supplier risk, which centers on combining financial indicators with operational observations (lead-time drift/quality) and ensuring dual sourcing has qualified capacity.",
+              "score": 0.5
+            }
+          },
+          "query": "Compare the report's inventory and supplier-risk recommendations.",
+          "retrieved_chunk_ids": [
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-9d79bf44b72e492c68c9e17fdab21e328a7dc706b1340ec8fe5e0e7a35c1e8c4",
+            "chunk-v1-cb90a8d6c3c0cb7ccd22da8a753785be73b48cde8e0fe803e0ea0daa79665c4a",
+            "chunk-v1-8634b156eadae61a124be55438531a9bf77483d54b35715eb48f173d638a5e85",
+            "chunk-v1-d04ef378c55908e48f14d1dbb3c4715571e67093baa92025d21755a5a90a0c3b"
+          ],
+          "tags": [
+            "multi_chunk",
+            "comparison"
+          ]
+        },
+        {
+          "candidate_answer": "The corpus does not provide the answer.",
+          "case_id": "gen-017",
+          "expected_out_of_corpus": true,
+          "failure_category": "out_of_corpus_required_abstention",
+          "golden_answer": "The corpus does not provide an answer about a cuttlefish breeding target.",
+          "golden_chunk_ids": [],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer correctly identifies that the provided context does not contain information regarding a cuttlefish breeding target.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "None of the retrieved chunks contain information related to cuttlefish or breeding targets; all retrieved content is irrelevant noise.",
+              "score": 0.0
+            },
+            "context_recall": {
+              "reason": "The retrieved contexts do not contain information about a cuttlefish breeding target, which correctly supports the conclusion that the information is unavailable.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The retrieved context does not contain any information regarding cuttlefish or breeding targets, so the candidate correctly identifies that the information is absent.",
+              "score": 1.0
+            }
+          },
+          "query": "What breeding target did our cuttlefish article set?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-91f30d9ee2ae93767ea549a7196c085c8e47185718d9592c919b604d182a72a6",
+            "chunk-v1-a54bffd9daf87089ff60bd93a8aa568186044899b7290a9c8eb24c5c2b2e60ac",
+            "chunk-v1-17f6752dff248245a4332bcd287cec498f821992694d3bf6adb9377e5d773080",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-072ad2a9241189ddb1a7c06316ee9952c2edf22917a60c40e88d2b12491f20bd"
+          ],
+          "tags": [
+            "out_of_corpus"
+          ]
+        },
+        {
+          "candidate_answer": "Monthly statements show allocated production, bill credits, and avoided emissions.",
+          "case_id": "gen-020",
+          "expected_out_of_corpus": false,
+          "failure_category": "missing_relevant_context",
+          "golden_answer": "Monthly statements show allocated solar production, bill credits, and avoided emissions.",
+          "golden_chunk_ids": [
+            "chunk-v1-12566a55c7ea39cb2ab1ba123613625439001cb27685e266d126d5530a8e81e7"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer directly and accurately provides the information requested from the context.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Only one of the five retrieved chunks is relevant to the query; the other four contain irrelevant noise.",
+              "score": 0.2
+            },
+            "context_recall": {
+              "reason": "The retrieved context contains the information, but omits the specific modifier 'solar' included in the golden answer, which describes the type of production being allocated.",
+              "score": 0.8
+            },
+            "faithfulness": {
+              "reason": "All claims in the candidate answer are explicitly supported by the retrieved context.",
+              "score": 1.0
+            }
+          },
+          "query": "What does Helios show residents each month?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-12566a55c7ea39cb2ab1ba123613625439001cb27685e266d126d5530a8e81e7",
+            "chunk-v1-a54bffd9daf87089ff60bd93a8aa568186044899b7290a9c8eb24c5c2b2e60ac",
+            "chunk-v1-265c5cb2688794b4b9bceed2b86cb7024cade0ce4a4ea66a0db46871cbf0f89f",
+            "chunk-v1-072ad2a9241189ddb1a7c06316ee9952c2edf22917a60c40e88d2b12491f20bd",
+            "chunk-v1-687460171f1b680a8f172dc3cbf7da7286d2a0b2e9b1eaf5c8dab195de670778"
+          ],
+          "tags": [
+            "named_entity"
+          ]
+        }
+      ],
+      "categories": {
+        "incomplete_multi_chunk_context": {
+          "answer_relevance": 0.45,
+          "context_precision": 0.3,
+          "context_recall": 0.5,
+          "faithfulness": 0.25
+        },
+        "irrelevant_distracting_context": {
+          "answer_relevance": 1.0,
+          "context_precision": 0.4,
+          "context_recall": 1.0,
+          "faithfulness": 1.0
+        },
+        "missing_relevant_context": {
+          "answer_relevance": 1.0,
+          "context_precision": 0.2,
+          "context_recall": 0.9,
+          "faithfulness": 1.0
+        },
+        "near_duplicate_conflicting_context": {
+          "answer_relevance": 0.9333333333333332,
+          "context_precision": 0.4666666666666666,
+          "context_recall": 1.0,
+          "faithfulness": 1.0
+        },
+        "out_of_corpus_required_abstention": {
+          "answer_relevance": 1.0,
+          "context_precision": 0.0,
+          "context_recall": 1.0,
+          "faithfulness": 1.0
+        }
+      },
+      "overall": {
+        "answer_relevance": 0.8555555555555556,
+        "context_precision": 0.3111111111111111,
+        "context_recall": 0.8666666666666667,
+        "faithfulness": 0.8333333333333334
+      },
+      "rerank": false
+    },
+    "on": {
+      "case_ids": [
+        "gen-001",
+        "gen-002",
+        "gen-003",
+        "gen-004",
+        "gen-005",
+        "gen-006",
+        "gen-007",
+        "gen-008",
+        "gen-009",
+        "gen-010",
+        "gen-011",
+        "gen-012",
+        "gen-013",
+        "gen-014",
+        "gen-015",
+        "gen-016",
+        "gen-017",
+        "gen-018",
+        "gen-019",
+        "gen-020"
+      ],
+      "cases": [
+        {
+          "candidate_answer": "The QuasarEdge controller identifier is QX-417.",
+          "case_id": "gen-001",
+          "expected_out_of_corpus": false,
+          "failure_category": "missing_relevant_context",
+          "golden_answer": "The controller identifier was QX-417.",
+          "golden_chunk_ids": [
+            "chunk-v1-2743cefb0ced9c3d23e32eabf6e88f109e166def113b1bdaae4400c32e5bc574"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer directly provides the correct controller identifier found in the retrieved context.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Only the first retrieved chunk is relevant. The remaining four chunks are unrelated to the query, introducing significant noise.",
+              "score": 0.2
+            },
+            "context_recall": {
+              "reason": "The retrieved context contains the exact identifier mentioned in the golden answer.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The retrieved context explicitly identifies the QuasarEdge controller as QX-417.",
+              "score": 1.0
+            }
+          },
+          "query": "What identifier did the QuasarEdge controller use?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-2743cefb0ced9c3d23e32eabf6e88f109e166def113b1bdaae4400c32e5bc574",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-0f7a53d3ac9ade134b608f743c44f75aeb435b0c962063464e6a8639946ad799",
+            "chunk-v1-dc00b85708178f578b892dadadaf44b6fb1bd0d602e4bc32ecef52683a137505",
+            "chunk-v1-b1a5d9915d02c867e2b7b5ed7ffbdb7b3cf72312509fd256ef36673fca62addb"
+          ],
+          "tags": [
+            "exact_term",
+            "named_entity"
+          ]
+        },
+        {
+          "candidate_answer": "SASE stands for Secure Access Service Edge.",
+          "case_id": "gen-002",
+          "expected_out_of_corpus": false,
+          "failure_category": "missing_relevant_context",
+          "golden_answer": "SASE stands for Secure Access Service Edge.",
+          "golden_chunk_ids": [
+            "chunk-v1-0f7a53d3ac9ade134b608f743c44f75aeb435b0c962063464e6a8639946ad799"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The candidate answer directly and accurately provides the definition of SASE found in the retrieved context.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Only one out of five retrieved chunks is relevant; the others introduce significant noise unrelated to the query.",
+              "score": 0.2
+            },
+            "context_recall": {
+              "reason": "The retrieved context explicitly states that SASE stands for Secure Access Service Edge.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer accurately identifies the definition of SASE, which is explicitly supported by the provided context.",
+              "score": 1.0
+            }
+          },
+          "query": "What does SASE stand for in our explainer?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-0f7a53d3ac9ade134b608f743c44f75aeb435b0c962063464e6a8639946ad799",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-9d79bf44b72e492c68c9e17fdab21e328a7dc706b1340ec8fe5e0e7a35c1e8c4",
+            "chunk-v1-072ad2a9241189ddb1a7c06316ee9952c2edf22917a60c40e88d2b12491f20bd",
+            "chunk-v1-dc00b85708178f578b892dadadaf44b6fb1bd0d602e4bc32ecef52683a137505"
+          ],
+          "tags": [
+            "exact_term",
+            "acronym"
+          ]
+        },
+        {
+          "candidate_answer": "Aurora launches on 12 January and includes downloadable city maps.",
+          "case_id": "gen-003",
+          "expected_out_of_corpus": false,
+          "failure_category": "near_duplicate_conflicting_context",
+          "golden_answer": "Aurora launches on 12 January and includes downloadable offline city maps.",
+          "golden_chunk_ids": [
+            "chunk-v1-cb8453ee7b28ec20b3f97e4e505c648d2e3c8dfb3886e89d56214cdf8558f309"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer provides the correct launch date and mentions the maps, but fails to explicitly label them as 'offline' maps, which was a specific part of the query.",
+              "score": 0.8
+            },
+            "context_precision": {
+              "reason": "Two retrieved chunks are highly relevant, but three chunks contain unrelated noise about trail maps and logistics, reducing precision.",
+              "score": 0.6
+            },
+            "context_recall": {
+              "reason": "The retrieved contexts explicitly state the launch date is 12 January and confirm the inclusion of offline city maps.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer accurately reflects the launch date and feature details provided in the retrieved context.",
+              "score": 1.0
+            }
+          },
+          "query": "When does Aurora launch and what offline feature is included?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-89f0d47369ae232a3073868195fd229a4c1908284ea6aa4be099b5bd2a983218",
+            "chunk-v1-cb8453ee7b28ec20b3f97e4e505c648d2e3c8dfb3886e89d56214cdf8558f309",
+            "chunk-v1-a54bffd9daf87089ff60bd93a8aa568186044899b7290a9c8eb24c5c2b2e60ac",
+            "chunk-v1-4a42549ab57d4d03b322f1d45c2feefec8a6c3396e64ad7525f52b00bb421f12",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008"
+          ],
+          "tags": [
+            "near_duplicate",
+            "named_entity"
+          ]
+        },
+        {
+          "candidate_answer": "Aurora protects location information through privacy-first location controls and by keeping location history private.",
+          "case_id": "gen-004",
+          "expected_out_of_corpus": false,
+          "failure_category": "irrelevant_distracting_context",
+          "golden_answer": "Aurora keeps location history private through privacy-first location controls.",
+          "golden_chunk_ids": [
+            "chunk-v1-cb8453ee7b28ec20b3f97e4e505c648d2e3c8dfb3886e89d56214cdf8558f309"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer directly and accurately addresses the query using the provided context.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Two of the four retrieved chunks are relevant to the query regarding privacy, while the remaining two provide irrelevant noise about logistics and unrelated products.",
+              "score": 0.5
+            },
+            "context_recall": {
+              "reason": "The retrieved contexts contain all the necessary information: one chunk confirms 'privacy-first location controls' and the other confirms 'keeping location history private'.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The retrieved context explicitly mentions both 'privacy-first location controls' and 'keeping location history private' as features of the Aurora service.",
+              "score": 1.0
+            }
+          },
+          "query": "How does the prior night travel product protect location information?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-89f0d47369ae232a3073868195fd229a4c1908284ea6aa4be099b5bd2a983218",
+            "chunk-v1-cb8453ee7b28ec20b3f97e4e505c648d2e3c8dfb3886e89d56214cdf8558f309",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-a54bffd9daf87089ff60bd93a8aa568186044899b7290a9c8eb24c5c2b2e60ac",
+            "chunk-v1-4a42549ab57d4d03b322f1d45c2feefec8a6c3396e64ad7525f52b00bb421f12"
+          ],
+          "tags": [
+            "semantic_paraphrase"
+          ]
+        },
+        {
+          "candidate_answer": "The heritage apple varieties named are Ashmead's Kernel and Egremont Russet.",
+          "case_id": "gen-005",
+          "expected_out_of_corpus": false,
+          "failure_category": "irrelevant_distracting_context",
+          "golden_answer": "It named Ashmead's Kernel and Egremont Russet.",
+          "golden_chunk_ids": [
+            "chunk-v1-17f6752dff248245a4332bcd287cec498f821992694d3bf6adb9377e5d773080"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer directly identifies the two apple varieties mentioned in the relevant source text.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Only one of the five retrieved chunks is relevant; the other four are unrelated noise.",
+              "score": 0.2
+            },
+            "context_recall": {
+              "reason": "The retrieved context contains all the necessary information to answer the query, specifically identifying Ashmead's Kernel and Egremont Russet as the heritage apple varieties.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate correctly identifies Ashmead's Kernel and Egremont Russet as the heritage apple varieties mentioned in the retrieved context.",
+              "score": 1.0
+            }
+          },
+          "query": "Which heritage apple varieties did the orchard article name?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-17f6752dff248245a4332bcd287cec498f821992694d3bf6adb9377e5d773080",
+            "chunk-v1-0f7a53d3ac9ade134b608f743c44f75aeb435b0c962063464e6a8639946ad799",
+            "chunk-v1-306b1b6c0b8bd82b13368f02adcce81bc816dfc2954d59578cc537294247ca72",
+            "chunk-v1-b1a5d9915d02c867e2b7b5ed7ffbdb7b3cf72312509fd256ef36673fca62addb",
+            "chunk-v1-2743cefb0ced9c3d23e32eabf6e88f109e166def113b1bdaae4400c32e5bc574"
+          ],
+          "tags": [
+            "exact_term",
+            "entity_ambiguity"
+          ]
+        },
+        {
+          "candidate_answer": "Apple's quarterly revenue discussion was driven by stronger services revenue and steady iPhone demand.",
+          "case_id": "gen-006",
+          "expected_out_of_corpus": false,
+          "failure_category": "irrelevant_distracting_context",
+          "golden_answer": "Stronger services revenue alongside steady iPhone demand drove the discussion.",
+          "golden_chunk_ids": [
+            "chunk-v1-306b1b6c0b8bd82b13368f02adcce81bc816dfc2954d59578cc537294247ca72"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer directly identifies the two primary factors mentioned in the text that drove the revenue discussion.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Only one of the five retrieved chunks is relevant; the remaining four are irrelevant noise.",
+              "score": 0.2
+            },
+            "context_recall": {
+              "reason": "The retrieved context contains all the necessary information to answer the question, matching the golden answer perfectly.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer accurately identifies that stronger services revenue and steady iPhone demand were the drivers mentioned in the context.",
+              "score": 1.0
+            }
+          },
+          "query": "What drove Apple's quarterly revenue discussion?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-306b1b6c0b8bd82b13368f02adcce81bc816dfc2954d59578cc537294247ca72",
+            "chunk-v1-9d79bf44b72e492c68c9e17fdab21e328a7dc706b1340ec8fe5e0e7a35c1e8c4",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-17f6752dff248245a4332bcd287cec498f821992694d3bf6adb9377e5d773080",
+            "chunk-v1-072ad2a9241189ddb1a7c06316ee9952c2edf22917a60c40e88d2b12491f20bd"
+          ],
+          "tags": [
+            "entity_ambiguity"
+          ]
+        },
+        {
+          "candidate_answer": "Meridian Labs gained supply-chain forecasting capabilities and strengthened predictive planning for global supply chains.",
+          "case_id": "gen-007",
+          "expected_out_of_corpus": false,
+          "failure_category": "near_duplicate_conflicting_context",
+          "golden_answer": "Meridian gained stronger predictive supply-chain planning and forecasting capabilities.",
+          "golden_chunk_ids": [
+            "chunk-v1-0a97a57f52f85cb54123b6f634fa3e1c80c83c2661b80a9d98242099bfd25271"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer accurately summarizes the capabilities Meridian Labs gained from the acquisition using the provided context.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Two retrieved chunks are highly relevant, but the remaining three chunks contain irrelevant noise related to logistics outlook and unrelated forums.",
+              "score": 0.4
+            },
+            "context_recall": {
+              "reason": "The retrieved chunks provide all necessary information, specifically mentioning 'supply-chain forecasting capabilities' and 'strengthened predictive planning'.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The retrieved context explicitly confirms that Meridian Labs acquired Northstar Analytics to strengthen predictive planning and expand supply-chain forecasting capabilities.",
+              "score": 1.0
+            }
+          },
+          "query": "What capability did Meridian gain from Northstar?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-fc436dda4255c3a8f5e60cb7ac9063e0aad3b69fe015bc1137e8bee3ff0c94b5",
+            "chunk-v1-0a97a57f52f85cb54123b6f634fa3e1c80c83c2661b80a9d98242099bfd25271",
+            "chunk-v1-d04ef378c55908e48f14d1dbb3c4715571e67093baa92025d21755a5a90a0c3b",
+            "chunk-v1-9d79bf44b72e492c68c9e17fdab21e328a7dc706b1340ec8fe5e0e7a35c1e8c4",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008"
+          ],
+          "tags": [
+            "near_duplicate",
+            "semantic_paraphrase"
+          ]
+        },
+        {
+          "candidate_answer": "The Meridian transaction is expected to close in the second quarter.",
+          "case_id": "gen-008",
+          "expected_out_of_corpus": false,
+          "failure_category": "near_duplicate_conflicting_context",
+          "golden_answer": "It was expected to close in Q2, subject to customary conditions.",
+          "golden_chunk_ids": [
+            "chunk-v1-0a97a57f52f85cb54123b6f634fa3e1c80c83c2661b80a9d98242099bfd25271"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer correctly identifies the timing of the transaction but omits the qualifying 'customary conditions' mentioned in the source context.",
+              "score": 0.9
+            },
+            "context_precision": {
+              "reason": "The first two retrieved chunks are highly relevant, but the remaining three chunks contain irrelevant noise unrelated to the query.",
+              "score": 0.4
+            },
+            "context_recall": {
+              "reason": "The retrieved contexts contain the full information regarding the expected closing timeline and the associated customary conditions required by the golden answer.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer is fully supported by the retrieved context, which explicitly states the transaction is expected to close in the second quarter.",
+              "score": 1.0
+            }
+          },
+          "query": "When was the Meridian transaction expected to close?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-fc436dda4255c3a8f5e60cb7ac9063e0aad3b69fe015bc1137e8bee3ff0c94b5",
+            "chunk-v1-0a97a57f52f85cb54123b6f634fa3e1c80c83c2661b80a9d98242099bfd25271",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-9d79bf44b72e492c68c9e17fdab21e328a7dc706b1340ec8fe5e0e7a35c1e8c4",
+            "chunk-v1-89f0d47369ae232a3073868195fd229a4c1908284ea6aa4be099b5bd2a983218"
+          ],
+          "tags": [
+            "near_duplicate"
+          ]
+        },
+        {
+          "candidate_answer": "Speakers emphasized incident drills, traceable decisions, and governance that product teams can actually follow.",
+          "case_id": "gen-009",
+          "expected_out_of_corpus": false,
+          "failure_category": "near_duplicate_conflicting_context",
+          "golden_answer": "They emphasized incident drills, traceable decisions, and practical governance product teams can follow.",
+          "golden_chunk_ids": [
+            "chunk-v1-91f30d9ee2ae93767ea549a7196c085c8e47185718d9592c919b604d182a72a6"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer directly and accurately addresses the query using the information provided in the context.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Only one out of the four retrieved chunks is relevant to the query; the remaining three chunks contain irrelevant noise unrelated to the summit.",
+              "score": 0.25
+            },
+            "context_recall": {
+              "reason": "The retrieved contexts contain the exact information needed to answer the query, as the text explicitly states the speakers emphasized incident drills, traceable decisions, and governance that product teams can follow.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer directly mirrors the provided context and is fully supported.",
+              "score": 1.0
+            }
+          },
+          "query": "What did Riverstone speakers emphasize after the summit?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-91f30d9ee2ae93767ea549a7196c085c8e47185718d9592c919b604d182a72a6",
+            "chunk-v1-a2e3fe58b62106ac10acb02fa96609e743dbbb2fabc6a1c08b38306331d5477b",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-89f0d47369ae232a3073868195fd229a4c1908284ea6aa4be099b5bd2a983218",
+            "chunk-v1-cb90a8d6c3c0cb7ccd22da8a753785be73b48cde8e0fe803e0ea0daa79665c4a"
+          ],
+          "tags": [
+            "recency",
+            "semantic_paraphrase"
+          ]
+        },
+        {
+          "candidate_answer": "The Riverstone summit sessions covered audit evidence, incident response, and accountable deployment.",
+          "case_id": "gen-010",
+          "expected_out_of_corpus": false,
+          "failure_category": "irrelevant_distracting_context",
+          "golden_answer": "The sessions covered audit evidence, incident response, and accountable deployment.",
+          "golden_chunk_ids": [
+            "chunk-v1-a2e3fe58b62106ac10acb02fa96609e743dbbb2fabc6a1c08b38306331d5477b"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer directly and accurately identifies the three areas covered by the Riverstone summit sessions as requested.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Only the first retrieved chunk is relevant. The remaining four chunks contain irrelevant information about logistics, resilience, and trail maps, introducing significant noise.",
+              "score": 0.2
+            },
+            "context_recall": {
+              "reason": "The retrieved context explicitly contains all three areas mentioned in the golden answer.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer accurately lists the three areas covered by the summit as explicitly stated in the retrieved context.",
+              "score": 1.0
+            }
+          },
+          "query": "What three areas did the Riverstone summit sessions cover?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-a2e3fe58b62106ac10acb02fa96609e743dbbb2fabc6a1c08b38306331d5477b",
+            "chunk-v1-91f30d9ee2ae93767ea549a7196c085c8e47185718d9592c919b604d182a72a6",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-9d79bf44b72e492c68c9e17fdab21e328a7dc706b1340ec8fe5e0e7a35c1e8c4",
+            "chunk-v1-4a42549ab57d4d03b322f1d45c2feefec8a6c3396e64ad7525f52b00bb421f12"
+          ],
+          "tags": [
+            "near_duplicate"
+          ]
+        },
+        {
+          "candidate_answer": "The corpus does not provide the answer.",
+          "case_id": "gen-011",
+          "expected_out_of_corpus": false,
+          "failure_category": "incomplete_multi_chunk_context",
+          "golden_answer": "Use modular, maintainable robotics that support safe human interaction and flexible seasonal throughput without rebuilding entire sites.",
+          "golden_chunk_ids": [
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The model incorrectly states that the corpus does not provide the answer, even though the information about warehouse automation is explicitly contained within the provided context.",
+              "score": 0.0
+            },
+            "context_precision": {
+              "reason": "None of the retrieved chunks contain the section on warehouse automation; the relevant content was entirely excluded from the retrieved set.",
+              "score": 0.0
+            },
+            "context_recall": {
+              "reason": "The retrieved chunks do not contain the section regarding warehouse automation; the provided context only covers the executive summary and portions of port operations.",
+              "score": 0.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer incorrectly claims the corpus does not provide the answer, whereas the retrieved context for 'Warehouse automation' contains the information.",
+              "score": 0.0
+            }
+          },
+          "query": "Summarize the warehouse automation recommendation.",
+          "retrieved_chunk_ids": [
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-9d79bf44b72e492c68c9e17fdab21e328a7dc706b1340ec8fe5e0e7a35c1e8c4",
+            "chunk-v1-b3a66607daa7923dc528714241145284085c4196307b652b12da799f3cceade3",
+            "chunk-v1-b1a5d9915d02c867e2b7b5ed7ffbdb7b3cf72312509fd256ef36673fca62addb",
+            "chunk-v1-0a97a57f52f85cb54123b6f634fa3e1c80c83c2661b80a9d98242099bfd25271"
+          ],
+          "tags": [
+            "long_document",
+            "semantic_paraphrase"
+          ]
+        },
+        {
+          "candidate_answer": "Regarding inventory, programs should connect commercial priorities with operational signals rather than applying a uniform policy everywhere, reserving capacity only where substitution is genuinely difficult. Regarding supplier risk, regionalization is not an automatic simplification because local networks may still rely on imported materials, specialist tools, concentrated energy infrastructure, or single transport corridors. Decision-makers are advised to trace several tiers of dependency and compare recovery characteristics rather than relying solely on geographic distance.",
+          "case_id": "gen-012",
+          "expected_out_of_corpus": false,
+          "failure_category": "incomplete_multi_chunk_context",
+          "golden_answer": "Supplier risk combines operational warning signs with qualified alternative capacity; inventory strategy segments buffers by volatility, substitution, replenishment time, and exposure.",
+          "golden_chunk_ids": [
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer accurately synthesizes the report's recommendations on inventory and supplier risk, although the second part of the answer relies more on the 'Regionalization' section of the text than the 'Supplier risk' section to explain the nuanced approach to supplier dependencies.",
+              "score": 0.9
+            },
+            "context_precision": {
+              "reason": "The retrieved contexts include two highly relevant chunks containing the necessary information on inventory and supplier risk, but also include three completely irrelevant chunks regarding unrelated business news, which introduces significant noise.",
+              "score": 0.4
+            },
+            "context_recall": {
+              "reason": "The retrieved context contains all necessary information to address the query regarding inventory strategy and supplier risk recommendations.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer accurately reflects the retrieved context regarding both inventory (connecting commercial priorities with operational signals rather than blanket policies) and supplier risk (cautioning that regionalization is not automatic simplification and emphasizing the need to trace multi-tier dependencies).",
+              "score": 1.0
+            }
+          },
+          "query": "Compare the report's inventory and supplier-risk recommendations.",
+          "retrieved_chunk_ids": [
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-9d79bf44b72e492c68c9e17fdab21e328a7dc706b1340ec8fe5e0e7a35c1e8c4",
+            "chunk-v1-306b1b6c0b8bd82b13368f02adcce81bc816dfc2954d59578cc537294247ca72",
+            "chunk-v1-0a97a57f52f85cb54123b6f634fa3e1c80c83c2661b80a9d98242099bfd25271",
+            "chunk-v1-cb90a8d6c3c0cb7ccd22da8a753785be73b48cde8e0fe803e0ea0daa79665c4a"
+          ],
+          "tags": [
+            "multi_chunk",
+            "comparison"
+          ]
+        },
+        {
+          "candidate_answer": "The corpus does not provide the answer.",
+          "case_id": "gen-013",
+          "expected_out_of_corpus": false,
+          "failure_category": "incomplete_multi_chunk_context",
+          "golden_answer": "It calls for tested system recovery and clear restoration priorities, while customer updates should state knowns, uncertainties, timing, and credible alternatives.",
+          "golden_chunk_ids": [
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The candidate answer claims the corpus does not provide the answer, but the provided context (specifically under 'Cyber resilience' and 'Customer communication') contains the necessary information to address the query.",
+              "score": 0.0
+            },
+            "context_precision": {
+              "reason": "The retrieved chunks do not contain information linking cyber recovery to customer communication; the relevant content was not included in the retrieved set.",
+              "score": 0.0
+            },
+            "context_recall": {
+              "reason": "The retrieved chunks do not contain the sections on 'Cyber resilience' or 'Customer communication' found in the full text of the source document, meaning the necessary information to answer the query is missing.",
+              "score": 0.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer incorrectly claims the information is missing. The provided context contains specific sections on both 'Cyber resilience' and 'Customer communication' within the 'Resilient Logistics Outlook 2026' document.",
+              "score": 0.0
+            }
+          },
+          "query": "How does the logistics report connect cyber recovery with customer communication?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-9d79bf44b72e492c68c9e17fdab21e328a7dc706b1340ec8fe5e0e7a35c1e8c4",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-dc00b85708178f578b892dadadaf44b6fb1bd0d602e4bc32ecef52683a137505",
+            "chunk-v1-d04ef378c55908e48f14d1dbb3c4715571e67093baa92025d21755a5a90a0c3b",
+            "chunk-v1-878f0bb3dc8734f71e8098a5fa3dddc006e3ddedd2899a436209b68253b83e88"
+          ],
+          "tags": [
+            "multi_chunk",
+            "long_document"
+          ]
+        },
+        {
+          "candidate_answer": "FinOps joins engineering, finance, and product by sharing timely usage data and ownership, connecting architecture decisions with unit economics.",
+          "case_id": "gen-014",
+          "expected_out_of_corpus": false,
+          "failure_category": "missing_relevant_context",
+          "golden_answer": "FinOps joins those teams around timely usage data, ownership, architecture decisions, and unit economics.",
+          "golden_chunk_ids": [
+            "chunk-v1-8634b156eadae61a124be55438531a9bf77483d54b35715eb48f173d638a5e85"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer directly identifies FinOps and correctly summarizes how it joins engineering, finance, and product teams using the provided context.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Only one out of the five retrieved chunks is relevant to the query; the other four contain irrelevant information about logistics, AI, and SASE.",
+              "score": 0.2
+            },
+            "context_recall": {
+              "reason": "The retrieved context contains all the necessary information to answer the query, as it explicitly lists the teams and the concepts involved.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "All claims in the candidate answer are directly supported by the provided context regarding FinOps.",
+              "score": 1.0
+            }
+          },
+          "query": "What cloud-cost practice joins engineering, finance, and product?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-8634b156eadae61a124be55438531a9bf77483d54b35715eb48f173d638a5e85",
+            "chunk-v1-9d79bf44b72e492c68c9e17fdab21e328a7dc706b1340ec8fe5e0e7a35c1e8c4",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-a2e3fe58b62106ac10acb02fa96609e743dbbb2fabc6a1c08b38306331d5477b",
+            "chunk-v1-0f7a53d3ac9ade134b608f743c44f75aeb435b0c962063464e6a8639946ad799"
+          ],
+          "tags": [
+            "semantic_paraphrase"
+          ]
+        },
+        {
+          "candidate_answer": "Atlas Private Spaces introduced encrypted project spaces with expiring guest access, while administrators receive access-event records without visibility into protected document contents.",
+          "case_id": "gen-015",
+          "expected_out_of_corpus": false,
+          "failure_category": "unsupported_claim_hallucination",
+          "golden_answer": "Encrypted project spaces, expiring guest access, and access-event records that do not expose protected document contents.",
+          "golden_chunk_ids": [
+            "chunk-v1-687460171f1b680a8f172dc3cbf7da7286d2a0b2e9b1eaf5c8dab195de670778"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer accurately and comprehensively summarizes the privacy controls introduced by Atlas Private Spaces as described in the context.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Only one of the five retrieved chunks is relevant to the query; the other four contain irrelevant noise regarding unrelated products.",
+              "score": 0.2
+            },
+            "context_recall": {
+              "reason": "The retrieved context contains all the necessary information to answer the query, as it matches the golden context.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "All claims in the candidate answer are directly supported by the retrieved context.",
+              "score": 1.0
+            }
+          },
+          "query": "What privacy controls did Atlas Private Spaces introduce?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-687460171f1b680a8f172dc3cbf7da7286d2a0b2e9b1eaf5c8dab195de670778",
+            "chunk-v1-89f0d47369ae232a3073868195fd229a4c1908284ea6aa4be099b5bd2a983218",
+            "chunk-v1-4a42549ab57d4d03b322f1d45c2feefec8a6c3396e64ad7525f52b00bb421f12",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-0f7a53d3ac9ade134b608f743c44f75aeb435b0c962063464e6a8639946ad799"
+          ],
+          "tags": [
+            "named_entity"
+          ]
+        },
+        {
+          "candidate_answer": "Advanced packaging is a market constraint because demand for AI accelerators is shifting attention toward it, alongside high-bandwidth memory.",
+          "case_id": "gen-016",
+          "expected_out_of_corpus": false,
+          "failure_category": "unsupported_claim_hallucination",
+          "golden_answer": "AI accelerator demand is pressuring high-bandwidth memory and advanced packaging even as conventional chip inventories normalize.",
+          "golden_chunk_ids": [
+            "chunk-v1-b1a5d9915d02c867e2b7b5ed7ffbdb7b3cf72312509fd256ef36673fca62addb"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer accurately identifies that demand for AI accelerators is the primary driver shifting industry focus toward advanced packaging, serving as a constraint.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Only one of the five retrieved chunks is relevant to the query; the remaining four contain noise unrelated to advanced packaging or AI accelerator market constraints.",
+              "score": 0.2
+            },
+            "context_recall": {
+              "reason": "The retrieved context contains all the necessary information to answer why advanced packaging is a market constraint, including the demand shift from AI accelerators and the status of conventional chip inventories.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer accurately reflects the context, which states that demand for AI accelerators is shifting attention toward high-bandwidth memory and advanced packaging, thereby establishing them as constraints.",
+              "score": 1.0
+            }
+          },
+          "query": "Why is advanced packaging a market constraint?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-b1a5d9915d02c867e2b7b5ed7ffbdb7b3cf72312509fd256ef36673fca62addb",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-9d79bf44b72e492c68c9e17fdab21e328a7dc706b1340ec8fe5e0e7a35c1e8c4",
+            "chunk-v1-0a97a57f52f85cb54123b6f634fa3e1c80c83c2661b80a9d98242099bfd25271",
+            "chunk-v1-17f6752dff248245a4332bcd287cec498f821992694d3bf6adb9377e5d773080"
+          ],
+          "tags": [
+            "semantic_paraphrase"
+          ]
+        },
+        {
+          "candidate_answer": "The corpus does not provide the answer.",
+          "case_id": "gen-017",
+          "expected_out_of_corpus": true,
+          "failure_category": "out_of_corpus_required_abstention",
+          "golden_answer": "The corpus does not provide an answer about a cuttlefish breeding target.",
+          "golden_chunk_ids": [],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer accurately states that the information is not present in the provided context, matching the intent of the golden answer.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "None of the retrieved chunks contain information related to cuttlefish or breeding targets; all retrieved content is noise.",
+              "score": 0.0
+            },
+            "context_recall": {
+              "reason": "The retrieved contexts do not contain information about a cuttlefish breeding target, which aligns with the golden answer that the corpus provides no such information.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate correctly identified that the provided context does not contain information regarding a cuttlefish breeding target.",
+              "score": 1.0
+            }
+          },
+          "query": "What breeding target did our cuttlefish article set?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-265c5cb2688794b4b9bceed2b86cb7024cade0ce4a4ea66a0db46871cbf0f89f",
+            "chunk-v1-878f0bb3dc8734f71e8098a5fa3dddc006e3ddedd2899a436209b68253b83e88",
+            "chunk-v1-072ad2a9241189ddb1a7c06316ee9952c2edf22917a60c40e88d2b12491f20bd",
+            "chunk-v1-0f7a53d3ac9ade134b608f743c44f75aeb435b0c962063464e6a8639946ad799"
+          ],
+          "tags": [
+            "out_of_corpus"
+          ]
+        },
+        {
+          "candidate_answer": "The corpus does not provide the answer.",
+          "case_id": "gen-018",
+          "expected_out_of_corpus": true,
+          "failure_category": "out_of_corpus_required_abstention",
+          "golden_answer": "The corpus does not contain a diabetes trial release or clinical endpoint.",
+          "golden_chunk_ids": [],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The candidate correctly identified that the provided context does not contain the requested information.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "None of the retrieved chunks contain information related to a diabetes trial or clinical endpoints; they are entirely irrelevant noise.",
+              "score": 0.0
+            },
+            "context_recall": {
+              "reason": "The retrieved contexts do not contain information about a diabetes trial, correctly supporting the conclusion that the information is absent from the corpus.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The provided context does not contain any information regarding a diabetes trial, so the candidate correctly identifies that the answer is not in the corpus.",
+              "score": 1.0
+            }
+          },
+          "query": "Which clinical endpoint appeared in our diabetes trial release?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-878f0bb3dc8734f71e8098a5fa3dddc006e3ddedd2899a436209b68253b83e88",
+            "chunk-v1-9d79bf44b72e492c68c9e17fdab21e328a7dc706b1340ec8fe5e0e7a35c1e8c4",
+            "chunk-v1-89f0d47369ae232a3073868195fd229a4c1908284ea6aa4be099b5bd2a983218",
+            "chunk-v1-2743cefb0ced9c3d23e32eabf6e88f109e166def113b1bdaae4400c32e5bc574",
+            "chunk-v1-4a42549ab57d4d03b322f1d45c2feefec8a6c3396e64ad7525f52b00bb421f12"
+          ],
+          "tags": [
+            "out_of_corpus"
+          ]
+        },
+        {
+          "candidate_answer": "The corpus does not provide the answer.",
+          "case_id": "gen-019",
+          "expected_out_of_corpus": true,
+          "failure_category": "out_of_corpus_required_abstention",
+          "golden_answer": "The corpus does not provide a Mars habitat budget.",
+          "golden_chunk_ids": [],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The candidate accurately identified that the provided context does not contain the requested information.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "None of the retrieved chunks contain information regarding a Mars habitat or a budget, rendering them entirely irrelevant.",
+              "score": 0.0
+            },
+            "context_recall": {
+              "reason": "The retrieved contexts do not contain information about a Mars habitat budget, which allows the model to correctly determine that the information is unavailable.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate correctly identified that the provided context does not contain information about a Mars habitat budget.",
+              "score": 1.0
+            }
+          },
+          "query": "What was the Mars habitat budget in the previous proposal?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-9d79bf44b72e492c68c9e17fdab21e328a7dc706b1340ec8fe5e0e7a35c1e8c4",
+            "chunk-v1-265c5cb2688794b4b9bceed2b86cb7024cade0ce4a4ea66a0db46871cbf0f89f",
+            "chunk-v1-0a97a57f52f85cb54123b6f634fa3e1c80c83c2661b80a9d98242099bfd25271",
+            "chunk-v1-878f0bb3dc8734f71e8098a5fa3dddc006e3ddedd2899a436209b68253b83e88"
+          ],
+          "tags": [
+            "out_of_corpus"
+          ]
+        },
+        {
+          "candidate_answer": "Monthly statements show allocated production, bill credits, and avoided emissions.",
+          "case_id": "gen-020",
+          "expected_out_of_corpus": false,
+          "failure_category": "missing_relevant_context",
+          "golden_answer": "Monthly statements show allocated solar production, bill credits, and avoided emissions.",
+          "golden_chunk_ids": [
+            "chunk-v1-12566a55c7ea39cb2ab1ba123613625439001cb27685e266d126d5530a8e81e7"
+          ],
+          "metrics": {
+            "answer_relevance": {
+              "reason": "The answer directly and accurately addresses the query using information provided in the context.",
+              "score": 1.0
+            },
+            "context_precision": {
+              "reason": "Only one out of five retrieved chunks is relevant; the other four contain significant noise unrelated to the query.",
+              "score": 0.2
+            },
+            "context_recall": {
+              "reason": "The retrieved context contains the exact phrase 'Monthly statements show allocated production, bill credits, and avoided emissions,' which is sufficient to answer the query and covers the components mentioned in the golden answer.",
+              "score": 1.0
+            },
+            "faithfulness": {
+              "reason": "The candidate answer accurately reflects the information provided in the context.",
+              "score": 1.0
+            }
+          },
+          "query": "What does Helios show residents each month?",
+          "retrieved_chunk_ids": [
+            "chunk-v1-12566a55c7ea39cb2ab1ba123613625439001cb27685e266d126d5530a8e81e7",
+            "chunk-v1-2c4b65309b03101aa92dd11edeb99ba2222e74a612743bfb349b4e4927125008",
+            "chunk-v1-cb8453ee7b28ec20b3f97e4e505c648d2e3c8dfb3886e89d56214cdf8558f309",
+            "chunk-v1-89f0d47369ae232a3073868195fd229a4c1908284ea6aa4be099b5bd2a983218",
+            "chunk-v1-072ad2a9241189ddb1a7c06316ee9952c2edf22917a60c40e88d2b12491f20bd"
+          ],
+          "tags": [
+            "named_entity"
+          ]
+        }
+      ],
+      "categories": {
+        "incomplete_multi_chunk_context": {
+          "answer_relevance": 0.3,
+          "context_precision": 0.13333333333333333,
+          "context_recall": 0.3333333333333333,
+          "faithfulness": 0.3333333333333333
+        },
+        "irrelevant_distracting_context": {
+          "answer_relevance": 1.0,
+          "context_precision": 0.275,
+          "context_recall": 1.0,
+          "faithfulness": 1.0
+        },
+        "missing_relevant_context": {
+          "answer_relevance": 1.0,
+          "context_precision": 0.2,
+          "context_recall": 1.0,
+          "faithfulness": 1.0
+        },
+        "near_duplicate_conflicting_context": {
+          "answer_relevance": 0.925,
+          "context_precision": 0.4125,
+          "context_recall": 1.0,
+          "faithfulness": 1.0
+        },
+        "out_of_corpus_required_abstention": {
+          "answer_relevance": 1.0,
+          "context_precision": 0.0,
+          "context_recall": 1.0,
+          "faithfulness": 1.0
+        },
+        "unsupported_claim_hallucination": {
+          "answer_relevance": 1.0,
+          "context_precision": 0.2,
+          "context_recall": 1.0,
+          "faithfulness": 1.0
+        }
+      },
+      "overall": {
+        "answer_relevance": 0.8800000000000001,
+        "context_precision": 0.21750000000000003,
+        "context_recall": 0.9,
+        "faithfulness": 0.9
+      },
+      "rerank": true
+    }
+  },
+  "corpus_sha256": "5b95072594c43aa662ffb3591745911467b5047b2523361f3056e624d86a9112",
+  "generator_model": "gemini-3.1-flash-lite",
+  "generator_prompt_version": "grounded-answer-v1",
+  "judge_model": "gemini-3.1-flash-lite",
+  "judge_prompt_version": "generation-judge-v1",
+  "retrieval_configuration": {
+    "bm25_depth": 30,
+    "dense_depth": 30,
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "fused_depth": 30,
+    "rerank_depth": 15,
+    "reranker_model": "cross-encoder/ms-marco-MiniLM-L6-v2",
+    "rrf_k": 60,
+    "top_k": 5
+  },
+  "run_at": "2026-08-05T10:47:45.941259+00:00",
+  "scorer_version": "bounded-score-v1"
+}

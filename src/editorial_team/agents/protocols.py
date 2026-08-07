@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from editorial_team.domain.editorial import CriticReport, WritingTask
+from editorial_team.domain.editorial import CriticReport, EditorialRunContext
 from editorial_team.operations.models import AdminAssessment, OperationalSnapshot
 from editorial_team.operations.policy import AdminPolicy
 
@@ -24,7 +24,7 @@ class AdminAgent(Protocol):
 class Writer(Protocol):
     """Produce an initial draft for a writing task."""
 
-    def write(self, task: WritingTask) -> str:
+    def write(self, context: EditorialRunContext) -> str:
         """Return the first draft."""
         ...
 
@@ -32,7 +32,7 @@ class Writer(Protocol):
 class Critic(Protocol):
     """Review a draft against its writing task."""
 
-    def review(self, task: WritingTask, draft: str) -> CriticReport:
+    def review(self, context: EditorialRunContext, draft: str) -> CriticReport:
         """Return a structured review of the exact supplied draft."""
         ...
 
@@ -42,7 +42,7 @@ class Editor(Protocol):
 
     def revise(
         self,
-        task: WritingTask,
+        context: EditorialRunContext,
         draft: str,
         report: CriticReport,
     ) -> str:

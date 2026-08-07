@@ -2,7 +2,7 @@
 
 from editorial_team.agents.parsing import execute_text
 from editorial_team.agents.prompts import editor_prompt
-from editorial_team.domain.editorial import CriticReport, WritingTask
+from editorial_team.domain.editorial import CriticReport, EditorialRunContext
 from editorial_team.models import ModelClient
 
 
@@ -14,7 +14,7 @@ class LlmEditor:
 
     def revise(
         self,
-        task: WritingTask,
+        context: EditorialRunContext,
         draft: str,
         report: CriticReport,
     ) -> str:
@@ -22,6 +22,6 @@ class LlmEditor:
 
         return execute_text(
             self._model,
-            editor_prompt(task, draft, report),
+            editor_prompt(context, draft, report),
             "Editor",
         )
