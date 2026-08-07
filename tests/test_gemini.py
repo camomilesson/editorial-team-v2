@@ -74,9 +74,7 @@ def test_converts_tool_results_to_gemini_input() -> None:
     interactions = FakeInteractions(interaction)
     client = GeminiModelClient(sdk_client=sdk_with(interactions))
 
-    response = client.respond(
-        ModelRequest((ToolResult("call-1", "lookup", {"found": True}),))
-    )
+    response = client.respond(ModelRequest((ToolResult("call-1", "lookup", {"found": True}),)))
 
     assert response.text == ""
     assert interactions.kwargs["input"] == [
@@ -87,6 +85,17 @@ def test_converts_tool_results_to_gemini_input() -> None:
             "result": [{"type": "text", "text": '{"found": true}'}],
         }
     ]
+
+
+def test_evaluation_temperature_is_explicit_and_default_is_unchanged() -> None:
+    default_interactions = FakeInteractions(SimpleNamespace(id="one", output_text="ok", steps=[]))
+    GeminiModelClient(sdk_client=sdk_with(default_interactions)).respond(ModelRequest("hello"))
+    assert "generation_config" not in default_interactions.kwargs
+
+    eval_interactions = FakeInteractions(SimpleNamespace(id="two", output_text="ok", steps=[]))
+    client = GeminiModelClient(sdk_client=sdk_with(eval_interactions), temperature=0.2)
+    client.respond(ModelRequest("hello"))
+    assert eval_interactions.kwargs["generation_config"] == {"temperature": 0.2}
 
 
 def test_forwards_structured_output_in_interactions_format() -> None:

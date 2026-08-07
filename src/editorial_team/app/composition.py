@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -52,6 +53,7 @@ from editorial_team.gemini import (
 from editorial_team.graphs import build_parent_graph, create_sqlite_checkpointer
 from editorial_team.interfaces.admin import TelegramMaintainerNotifier
 from editorial_team.interfaces.telegram import TelegramAdapter, build_telegram_application
+from editorial_team.mlflow_tracing import initialize_mlflow_tracing
 from editorial_team.models import ModelClient
 from editorial_team.operations import (
     AdminPolicy,
@@ -104,6 +106,8 @@ def build_conversation_service(
     coordinator_chat_model: object | None = None,
     retrieval_configuration: RetrievalConfiguration | None = None,
     user_timezone: str = "Europe/Madrid",
+    clock: Callable[[], datetime] | None = None,
+    protected_output_markers: tuple[str, ...] = (),
 ) -> ConversationService:
     """Wire the real agents around one shared provider-neutral model client."""
 
@@ -116,8 +120,10 @@ def build_conversation_service(
     def identifier_generator() -> str:
         return uuid4().hex
 
-    def clock() -> datetime:
+    def system_clock() -> datetime:
         return datetime.now(UTC)
+
+    evaluation_or_system_clock = clock or system_clock
 
     artifact_store = SQLiteArtifactStore(
         artifact_path or checkpoint_path.with_name("editorial_artifacts.db"),
@@ -159,7 +165,7 @@ def build_conversation_service(
             critic=critic,
             editor=editor,
             identifier_generator=identifier_generator,
-            clock=clock,
+            clock=evaluation_or_system_clock,
             max_recent_messages=RECENT_MESSAGE_LIMIT,
             artifact_store=artifact_store,
             tool_coordinator=tool_coordinator,
@@ -188,11 +194,14 @@ def build_conversation_service(
     return ConversationService(
         graph_runner=graph_runner,
         close_checkpointer=close_resources,
+        protected_output_markers=protected_output_markers,
     )
 
 
 def build_live_application_from_env() -> LiveApplication:
     """Validate process configuration and compose the polling application."""
+
+    initialize_mlflow_tracing()
 
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:

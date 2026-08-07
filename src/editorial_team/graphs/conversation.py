@@ -49,6 +49,17 @@ from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
 from editorial_team.errors import ServiceError
 from editorial_team.graphs.editorial import EditorialGraphError, build_editorial_subgraph
 from editorial_team.graphs.state import EditorialGraphStateV1, validate_graph_state_version
+from editorial_team.mlflow_tracing import (
+    record_safety_attributes,
+    record_tool_exception,
+    record_tool_result,
+    tool_execution_span,
+)
+from editorial_team.safety import (
+    detect_indirect_instruction,
+    safety_attributes,
+    tool_denial_attributes,
+)
 from editorial_team.tracing import (
     current_trace_stage,
     error_category,
@@ -249,6 +260,7 @@ class _ConversationNodes:
             name = call.get("name")
             tool = tools.get(name)
             if tool is None:
+                record_safety_attributes(tool_denial_attributes("unknown_tool_denied"))
                 output = {
                     "ok": False,
                     "error": {
@@ -256,25 +268,42 @@ class _ConversationNodes:
                         "message": "The tool is unavailable",
                     },
                 }
-            elif name == "get_draft" and not search_completed:
-                output = {
-                    "ok": False,
-                    "error": {
-                        "type": "search_required",
-                        "message": "Search the corpus before selecting a draft",
-                    },
-                }
             else:
+                raw_arguments = call.get("args", {})
                 try:
-                    output = tool.invoke(call.get("args", {}))
+                    traced_arguments = tool.args_schema.model_validate(raw_arguments).model_dump()
                 except Exception:
-                    output = {
-                        "ok": False,
-                        "error": {
-                            "type": "invalid_tool_arguments",
-                            "message": "The tool arguments are invalid",
-                        },
-                    }
+                    traced_arguments = raw_arguments
+                    record_safety_attributes(tool_denial_attributes("invalid_tool_schema"))
+                with tool_execution_span(
+                    name=str(name),
+                    arguments=traced_arguments,
+                    call_id=call.get("id"),
+                ) as tool_span:
+                    execution_failed = False
+                    if name == "get_draft" and not search_completed:
+                        output = {
+                            "ok": False,
+                            "error": {
+                                "type": "search_required",
+                                "message": "Search the corpus before selecting a draft",
+                            },
+                        }
+                    else:
+                        try:
+                            output = tool.invoke(raw_arguments)
+                        except Exception:
+                            execution_failed = True
+                            record_tool_exception(tool_span)
+                            output = {
+                                "ok": False,
+                                "error": {
+                                    "type": "invalid_tool_arguments",
+                                    "message": "The tool arguments are invalid",
+                                },
+                            }
+                    if not execution_failed:
+                        record_tool_result(tool_span, output)
             if (
                 name == "search_corpus"
                 and isinstance(output, dict)
@@ -305,6 +334,11 @@ class _ConversationNodes:
         data = output.get("data")
         if not isinstance(data, dict):
             raise ConversationGraphError("Retrieved draft is invalid")
+        content = data.get("content")
+        if isinstance(content, str):
+            decision = detect_indirect_instruction(content)
+            if decision.flagged:
+                record_safety_attributes(safety_attributes(decision, indirect=True))
         return {
             "ok": True,
             "data": {

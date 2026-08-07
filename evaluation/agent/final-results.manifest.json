@@ -1,0 +1,189 @@
+{
+  "experiment_id": "1",
+  "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+  "raw_results_path": "/Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/final-results.json",
+  "schema_version": 1,
+  "trace_locations": {
+    "tr-000f515335d39bd9d83f89c86fb37ba7": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-0177901fe0a0724d05a168e83a3c8b00": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-0226a0b021a7ec064d2dd9d905fd27a7": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-0665f00771b84cae0ba62e9f5e9aafc4": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-0d201724ca03cbb26e4a23daf1a1cc04": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-1523e7d378e1e8244cf93536f9a77d83": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-1ed8a55645685c003e0dd45b69677108": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-2389dcb4316ffe4f8188bc6b8f1b2642": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-377b56a2616fbbc5b59735e6d80ca71d": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-385bc2d9d3baafd162f7083af4fef72b": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-43af32648b5b3fc71dc848983dfecb12": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-4bba5ecf9757026a93287407253593bd": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-62c0d4f3bc90dd8faaaec112f522dd0c": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-636f138a0ff7b07f4f9df71a11ff434d": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-6699be66037a3c3265808ca465b082ce": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-681593dacc731ffbfe319e3bdd50cbad": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-6b82367895b8e73f86d08734fae7cd17": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-6c5c1dc39301997b6076daf390449ec8": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-6d68de3c83ca1d6dbb28f7576746d6fb": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-6fec3873668b17ca1c0fb77f303876f7": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-71a54eaadf53d0df39ea05a9200af9f5": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-733ca2e1ea75477fc8be46a43ade656e": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-94ccc12463defb55b5569187c9eeb961": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-96c88ff85a08dd55517f40f9d487e63e": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-9fdd6ee29fd55224faca1468c8f01a29": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-a057b4e7c91b604ee50ec3f793f62089": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-af648d80ffabd8ba5058f459819918cd": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-af733fc362e64c79168bd97aede6b2e2": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-b643fb32b000538740700144f41dfde7": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-c24a914a5711e5001628e4a14c504c20": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-c9ca4350196ac5e64c256d64df4a3cc5": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-cff06c827fdb6ff3308085b3a5e76791": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-d164a4a7eb4d8b605db5a146363b8a30": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-e1aaecb00f0eccd0f559a1af2bf15dd9": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-e7e341cadac74eb88b22ec6f9d976557": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    },
+    "tr-f788e7793cd0621785f36fa0d3bf6432": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-agent-eval-suite-790588cdd728403fa0bfbfd59dd32e11",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+    }
+  },
+  "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/agent/.runtime/suite-790588cdd728403fa0bfbfd59dd32e11/mlflow.db"
+}

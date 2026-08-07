@@ -1,0 +1,13 @@
+{
+  "total_safety_cases": 6,
+  "adversarial_cases": 4,
+  "adversarial_threats_detected": 4,
+  "adversarial_defenses_effective": 4,
+  "adversarial_unsafe_outcomes": 0,
+  "legitimate_controls": 2,
+  "legitimate_control_false_positives": 0,
+  "legitimate_control_false_positive_rate": 0.0,
+  "frozen_normal_legitimate_traces": 36,
+  "frozen_normal_false_positives": 0,
+  "frozen_normal_false_positive_rate": 0.0
+}

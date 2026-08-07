@@ -1,0 +1,873 @@
+{
+  "cases": [
+    {
+      "case_id": "active_revision",
+      "goal_completion_rate": 1.0,
+      "parameter_accuracy": 1.0,
+      "pass_at_3": 1,
+      "pass_count": 3,
+      "pass_power_3": 1,
+      "pattern": "3/3",
+      "run_count": 3,
+      "success_rate": 1.0,
+      "tool_selection_accuracy": 1.0
+    },
+    {
+      "case_id": "ambiguous_reference",
+      "goal_completion_rate": 1.0,
+      "parameter_accuracy": 1.0,
+      "pass_at_3": 1,
+      "pass_count": 3,
+      "pass_power_3": 1,
+      "pattern": "3/3",
+      "run_count": 3,
+      "success_rate": 1.0,
+      "tool_selection_accuracy": 1.0
+    },
+    {
+      "case_id": "chat_simple",
+      "goal_completion_rate": 0.6666666666666666,
+      "parameter_accuracy": 1.0,
+      "pass_at_3": 1,
+      "pass_count": 2,
+      "pass_power_3": 0,
+      "pattern": "2/3",
+      "run_count": 3,
+      "success_rate": 0.6666666666666666,
+      "tool_selection_accuracy": 1.0
+    },
+    {
+      "case_id": "historical_revision",
+      "goal_completion_rate": 1.0,
+      "parameter_accuracy": 1.0,
+      "pass_at_3": 1,
+      "pass_count": 3,
+      "pass_power_3": 1,
+      "pattern": "3/3",
+      "run_count": 3,
+      "success_rate": 1.0,
+      "tool_selection_accuracy": 1.0
+    },
+    {
+      "case_id": "retrieval_rerank",
+      "goal_completion_rate": 1.0,
+      "parameter_accuracy": 1.0,
+      "pass_at_3": 1,
+      "pass_count": 3,
+      "pass_power_3": 1,
+      "pattern": "3/3",
+      "run_count": 3,
+      "success_rate": 1.0,
+      "tool_selection_accuracy": 1.0
+    },
+    {
+      "case_id": "retrieve_exact_draft",
+      "goal_completion_rate": 1.0,
+      "parameter_accuracy": 1.0,
+      "pass_at_3": 1,
+      "pass_count": 3,
+      "pass_power_3": 1,
+      "pattern": "3/3",
+      "run_count": 3,
+      "success_rate": 1.0,
+      "tool_selection_accuracy": 1.0
+    },
+    {
+      "case_id": "retrieve_latest_topic",
+      "goal_completion_rate": 1.0,
+      "parameter_accuracy": 1.0,
+      "pass_at_3": 1,
+      "pass_count": 3,
+      "pass_power_3": 1,
+      "pattern": "3/3",
+      "run_count": 3,
+      "success_rate": 1.0,
+      "tool_selection_accuracy": 1.0
+    },
+    {
+      "case_id": "retrieve_recent_period",
+      "goal_completion_rate": 1.0,
+      "parameter_accuracy": 1.0,
+      "pass_at_3": 1,
+      "pass_count": 3,
+      "pass_power_3": 1,
+      "pattern": "3/3",
+      "run_count": 3,
+      "success_rate": 1.0,
+      "tool_selection_accuracy": 1.0
+    },
+    {
+      "case_id": "search_no_match",
+      "goal_completion_rate": 1.0,
+      "parameter_accuracy": 1.0,
+      "pass_at_3": 1,
+      "pass_count": 3,
+      "pass_power_3": 1,
+      "pattern": "3/3",
+      "run_count": 3,
+      "success_rate": 1.0,
+      "tool_selection_accuracy": 1.0
+    },
+    {
+      "case_id": "tool_restraint",
+      "goal_completion_rate": 1.0,
+      "parameter_accuracy": 1.0,
+      "pass_at_3": 1,
+      "pass_count": 3,
+      "pass_power_3": 1,
+      "pattern": "3/3",
+      "run_count": 3,
+      "success_rate": 1.0,
+      "tool_selection_accuracy": 1.0
+    },
+    {
+      "case_id": "write_from_prompt",
+      "goal_completion_rate": 1.0,
+      "parameter_accuracy": 1.0,
+      "pass_at_3": 1,
+      "pass_count": 3,
+      "pass_power_3": 1,
+      "pattern": "3/3",
+      "run_count": 3,
+      "success_rate": 1.0,
+      "tool_selection_accuracy": 1.0
+    },
+    {
+      "case_id": "write_with_memory",
+      "goal_completion_rate": 1.0,
+      "parameter_accuracy": 0.3333333333333333,
+      "pass_at_3": 1,
+      "pass_count": 1,
+      "pass_power_3": 0,
+      "pattern": "1/3",
+      "run_count": 3,
+      "success_rate": 0.3333333333333333,
+      "tool_selection_accuracy": 1.0
+    }
+  ],
+  "runs": [
+    {
+      "case_id": "active_revision",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": null,
+      "run_number": 1,
+      "tool_trajectory": [],
+      "trace_id": "tr-0665f00771b84cae0ba62e9f5e9aafc4",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "active_revision",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": null,
+      "run_number": 2,
+      "tool_trajectory": [],
+      "trace_id": "tr-d164a4a7eb4d8b605db5a146363b8a30",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "active_revision",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": null,
+      "run_number": 3,
+      "tool_trajectory": [],
+      "trace_id": "tr-6c5c1dc39301997b6076daf390449ec8",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "ambiguous_reference",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.4,
+        "recall_at_5": 1.0
+      },
+      "run_number": 1,
+      "tool_trajectory": [
+        "search_corpus"
+      ],
+      "trace_id": "tr-c9ca4350196ac5e64c256d64df4a3cc5",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "ambiguous_reference",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.4,
+        "recall_at_5": 1.0
+      },
+      "run_number": 2,
+      "tool_trajectory": [
+        "search_corpus"
+      ],
+      "trace_id": "tr-94ccc12463defb55b5569187c9eeb961",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "ambiguous_reference",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.4,
+        "recall_at_5": 1.0
+      },
+      "run_number": 3,
+      "tool_trajectory": [
+        "search_corpus"
+      ],
+      "trace_id": "tr-636f138a0ff7b07f4f9df71a11ff434d",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "chat_simple",
+      "error": "ConversationServiceError: Coordinator failed",
+      "generation_scores": null,
+      "goal_completion_passed": false,
+      "overall_passed": false,
+      "parameters_passed": true,
+      "retrieval_scores": null,
+      "run_number": 1,
+      "tool_trajectory": [],
+      "trace_id": "tr-a057b4e7c91b604ee50ec3f793f62089",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "chat_simple",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": null,
+      "run_number": 2,
+      "tool_trajectory": [],
+      "trace_id": "tr-e7e341cadac74eb88b22ec6f9d976557",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "chat_simple",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": null,
+      "run_number": 3,
+      "tool_trajectory": [],
+      "trace_id": "tr-43af32648b5b3fc71dc848983dfecb12",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "historical_revision",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 1.0,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "faithfulness": 0.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 1,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-1ed8a55645685c003e0dd45b69677108",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "historical_revision",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 0.2,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "faithfulness": 0.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 2,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-681593dacc731ffbfe319e3bdd50cbad",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "historical_revision",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 1.0,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 3,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-733ca2e1ea75477fc8be46a43ade656e",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "retrieval_rerank",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 1.0,
+        "context_precision": 0.5,
+        "context_recall": 1.0,
+        "faithfulness": 0.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 1,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-0d201724ca03cbb26e4a23daf1a1cc04",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "retrieval_rerank",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 1.0,
+        "context_precision": 0.5,
+        "context_recall": 1.0,
+        "faithfulness": 0.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 2,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-000f515335d39bd9d83f89c86fb37ba7",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "retrieval_rerank",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 1.0,
+        "context_precision": 0.5,
+        "context_recall": 1.0,
+        "faithfulness": 0.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 3,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-96c88ff85a08dd55517f40f9d487e63e",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "retrieve_exact_draft",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 0.8,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 1,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-377b56a2616fbbc5b59735e6d80ca71d",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "retrieve_exact_draft",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 0.8,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 2,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-cff06c827fdb6ff3308085b3a5e76791",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "retrieve_exact_draft",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 0.8,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 3,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-6699be66037a3c3265808ca465b082ce",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "retrieve_latest_topic",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 1.0,
+        "context_precision": 0.5,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 0.5,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 1,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-385bc2d9d3baafd162f7083af4fef72b",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "retrieve_latest_topic",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 1.0,
+        "context_precision": 0.5,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 0.5,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 2,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-6d68de3c83ca1d6dbb28f7576746d6fb",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "retrieve_latest_topic",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 1.0,
+        "context_precision": 0.5,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 0.5,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 3,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-b643fb32b000538740700144f41dfde7",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "retrieve_recent_period",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 0.6,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 1,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-f788e7793cd0621785f36fa0d3bf6432",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "retrieve_recent_period",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 0.4,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 2,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-c24a914a5711e5001628e4a14c504c20",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "retrieve_recent_period",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 0.5,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 3,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-af733fc362e64c79168bd97aede6b2e2",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "search_no_match",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": null,
+      "run_number": 1,
+      "tool_trajectory": [
+        "search_corpus",
+        "search_corpus"
+      ],
+      "trace_id": "tr-0177901fe0a0724d05a168e83a3c8b00",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "search_no_match",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": null,
+      "run_number": 2,
+      "tool_trajectory": [
+        "search_corpus",
+        "search_corpus"
+      ],
+      "trace_id": "tr-62c0d4f3bc90dd8faaaec112f522dd0c",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "search_no_match",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": null,
+      "run_number": 3,
+      "tool_trajectory": [
+        "search_corpus",
+        "search_corpus"
+      ],
+      "trace_id": "tr-e1aaecb00f0eccd0f559a1af2bf15dd9",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "tool_restraint",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": null,
+      "run_number": 1,
+      "tool_trajectory": [],
+      "trace_id": "tr-71a54eaadf53d0df39ea05a9200af9f5",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "tool_restraint",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": null,
+      "run_number": 2,
+      "tool_trajectory": [],
+      "trace_id": "tr-9fdd6ee29fd55224faca1468c8f01a29",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "tool_restraint",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": null,
+      "run_number": 3,
+      "tool_trajectory": [],
+      "trace_id": "tr-1523e7d378e1e8244cf93536f9a77d83",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "write_from_prompt",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": null,
+      "run_number": 1,
+      "tool_trajectory": [],
+      "trace_id": "tr-2389dcb4316ffe4f8188bc6b8f1b2642",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "write_from_prompt",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": null,
+      "run_number": 2,
+      "tool_trajectory": [],
+      "trace_id": "tr-6b82367895b8e73f86d08734fae7cd17",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "write_from_prompt",
+      "error": null,
+      "generation_scores": null,
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": null,
+      "run_number": 3,
+      "tool_trajectory": [],
+      "trace_id": "tr-0226a0b021a7ec064d2dd9d905fd27a7",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "write_with_memory",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 0.5,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": false,
+      "parameters_passed": false,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 1,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-af648d80ffabd8ba5058f459819918cd",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "write_with_memory",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 0.6,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": true,
+      "parameters_passed": true,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 2,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-6fec3873668b17ca1c0fb77f303876f7",
+      "trajectory_passed": true
+    },
+    {
+      "case_id": "write_with_memory",
+      "error": null,
+      "generation_scores": {
+        "answer_relevance": 0.4,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "goal_completion_passed": true,
+      "overall_passed": false,
+      "parameters_passed": false,
+      "retrieval_scores": {
+        "mrr_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "run_number": 3,
+      "tool_trajectory": [
+        "search_corpus",
+        "get_draft"
+      ],
+      "trace_id": "tr-4bba5ecf9757026a93287407253593bd",
+      "trajectory_passed": true
+    }
+  ],
+  "schema_version": 1,
+  "suite": {
+    "field_level_parameter_accuracy": 0.9607843137254902,
+    "goal_completion_rate": 0.9722222222222222,
+    "mixed_result_scenarios": 2,
+    "overall_success_rate": 0.9166666666666666,
+    "overall_successful_runs": 33,
+    "run_level_parameter_accuracy": 0.9444444444444444,
+    "tool_selection_accuracy": 1.0,
+    "total_runs": 36,
+    "total_scenarios": 12
+  }
+}

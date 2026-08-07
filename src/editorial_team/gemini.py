@@ -9,6 +9,11 @@ from typing import Any
 from google import genai
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+from editorial_team.mlflow_tracing import (
+    gemini_llm_span,
+    mark_llm_failure,
+    record_gemini_usage,
+)
 from editorial_team.models import (
     ModelClientError,
     ModelRequest,
@@ -29,11 +34,19 @@ class GeminiModelClient:
         model: str = DEFAULT_GEMINI_MODEL,
         api_key: str | None = None,
         sdk_client: Any | None = None,
+        temperature: float | None = None,
     ) -> None:
         if not isinstance(model, str) or not model.strip():
             raise ValueError("A Gemini model name is required")
 
         self.model = model
+        if temperature is not None and (
+            isinstance(temperature, bool)
+            or not isinstance(temperature, (int, float))
+            or not 0 < temperature <= 2
+        ):
+            raise ValueError("temperature must be greater than zero and at most two")
+        self.temperature = temperature
 
         if sdk_client is not None:
             self._client = sdk_client
@@ -53,6 +66,9 @@ class GeminiModelClient:
         if request.tools:
             kwargs["tools"] = list(request.tools)
 
+        if self.temperature is not None:
+            kwargs["generation_config"] = {"temperature": self.temperature}
+
         if request.continuation_token:
             kwargs["previous_interaction_id"] = request.continuation_token
 
@@ -63,24 +79,35 @@ class GeminiModelClient:
                 "schema_": request.structured_output.schema,
             }
 
-        try:
-            interaction = self._client.interactions.create(**kwargs)
-            tool_calls = tuple(
-                ToolCall(
-                    call_id=step.id,
-                    name=step.name,
-                    arguments=dict(step.arguments or {}),
+        with gemini_llm_span(model=self.model) as span:
+            try:
+                interaction = self._client.interactions.create(**kwargs)
+                tool_calls = tuple(
+                    ToolCall(
+                        call_id=step.id,
+                        name=step.name,
+                        arguments=dict(step.arguments or {}),
+                    )
+                    for step in interaction.steps
+                    if step.type == "function_call"
                 )
-                for step in interaction.steps
-                if step.type == "function_call"
-            )
-            return ModelResponse(
-                text=interaction.output_text or "",
-                tool_calls=tool_calls,
-                continuation_token=interaction.id,
-            )
-        except Exception as exc:
-            raise ModelClientError("Gemini model call failed") from exc
+                response = ModelResponse(
+                    text=interaction.output_text or "",
+                    tool_calls=tool_calls,
+                    continuation_token=interaction.id,
+                )
+                record_gemini_usage(span, interaction)
+                if span is not None:
+                    span.set_attributes(
+                        {
+                            "response.text_present": bool(response.text),
+                            "response.tool_call_count": len(response.tool_calls),
+                        }
+                    )
+                return response
+            except Exception:
+                mark_llm_failure(span)
+                raise ModelClientError("Gemini model call failed") from None
 
     @staticmethod
     def _convert_input(
@@ -105,7 +132,7 @@ class GeminiModelClient:
         ]
 
 
-def create_gemini_client_from_env() -> GeminiModelClient:
+def create_gemini_client_from_env(*, temperature: float | None = None) -> GeminiModelClient:
     """Create a Gemini client using environment variables."""
 
     provider = os.getenv("MODEL_PROVIDER", "gemini").strip().lower()
@@ -119,10 +146,12 @@ def create_gemini_client_from_env() -> GeminiModelClient:
         raise ValueError("GEMINI_API_KEY is not configured")
 
     model = os.getenv("AGENT_MODEL", "").strip() or DEFAULT_GEMINI_MODEL
-    return GeminiModelClient(model=model, api_key=api_key)
+    return GeminiModelClient(model=model, api_key=api_key, temperature=temperature)
 
 
-def create_gemini_chat_model_from_env() -> ChatGoogleGenerativeAI:
+def create_gemini_chat_model_from_env(
+    *, temperature: float | None = None
+) -> ChatGoogleGenerativeAI:
     """Create the LangChain chat adapter with the same configured Gemini model."""
 
     provider = os.getenv("MODEL_PROVIDER", "gemini").strip().lower()
@@ -132,4 +161,7 @@ def create_gemini_chat_model_from_env() -> ChatGoogleGenerativeAI:
     if not api_key:
         raise ValueError("GEMINI_API_KEY is not configured")
     model = os.getenv("AGENT_MODEL", "").strip() or DEFAULT_GEMINI_MODEL
-    return ChatGoogleGenerativeAI(model=model, api_key=api_key)
+    kwargs: dict[str, Any] = {"model": model, "api_key": api_key}
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+    return ChatGoogleGenerativeAI(**kwargs)
