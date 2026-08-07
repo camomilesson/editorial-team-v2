@@ -60,10 +60,11 @@ class AgentRunExecutor(Protocol):
 class AgentRunFailure(RuntimeError):
     """Sanitized failed invocation with its persisted trace identity when available."""
 
-    def __init__(self, trace_id: str, public_error: str) -> None:
+    def __init__(self, trace_id: str, public_error: str, *, trace: Any | None = None) -> None:
         super().__init__(public_error)
         self.trace_id = trace_id
         self.public_error = public_error
+        self.trace = trace
 
 
 @dataclass(frozen=True)
@@ -166,6 +167,19 @@ def run_agent_evaluation(
                 if isinstance(exc, AgentRunFailure)
                 else f"{type(exc).__name__}: {exc}"
             )
+            failure_calls = (
+                trace_to_tool_calls(exc.trace)
+                if isinstance(exc, AgentRunFailure) and exc.trace is not None
+                else None
+            )
+            failure_trajectory = (
+                tuple(call.tool for call in failure_calls) if failure_calls is not None else ()
+            )
+            failure_comparisons = (
+                compare_parameters(failure_calls, case.parameter_expectations)
+                if failure_calls is not None
+                else ()
+            )
             result = AgentRunResult(
                 case_id=case.case_id,
                 run_number=identity.run_number,
@@ -174,11 +188,19 @@ def run_agent_evaluation(
                 request_origin=identity.request_origin,
                 agent_temperature=agent_temperature,
                 trace_id=trace_id,
-                tool_trajectory=(),
+                tool_trajectory=failure_trajectory,
                 accepted_trajectories=case.accepted_trajectories,
-                trajectory_passed=False,
-                parameter_comparisons=(),
-                parameters_passed=False,
+                trajectory_passed=(
+                    failure_trajectory in case.accepted_trajectories
+                    if failure_calls is not None
+                    else False
+                ),
+                parameter_comparisons=failure_comparisons,
+                parameters_passed=(
+                    all(item.passed for item in failure_comparisons)
+                    if failure_calls is not None
+                    else False
+                ),
                 goal_completion_passed=False,
                 retrieval_scores=None,
                 generation_scores=None,

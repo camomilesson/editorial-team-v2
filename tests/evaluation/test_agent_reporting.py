@@ -23,6 +23,7 @@ from editorial_team.evaluation.agent_reporting import (
     load_run_results,
     log_campaign_feedback,
     log_campaign_safety_feedback,
+    rescore_part1_from_stored_traces,
     rescore_stored_traces,
 )
 from editorial_team.mlflow_tracing import (
@@ -227,6 +228,30 @@ def test_feedback_works_after_result_serialization_and_reload(tmp_path: Path) ->
     assert {item["trace_id"] for item in logged} == {"tr-case-1"}
 
 
+def test_feedback_overrides_existing_metric_instead_of_logging_duplicate() -> None:
+    result = _result("case", 1)
+    existing = SimpleNamespace(
+        name=PART1_FEEDBACK_NAMES["tool_selection"],
+        valid=True,
+        assessment_id="assessment-old",
+    )
+    trace = SimpleNamespace(info=SimpleNamespace(experiment_id="exp-1", assessments=[existing]))
+    logged: list[dict[str, object]] = []
+    overridden: list[dict[str, object]] = []
+
+    log_campaign_feedback(
+        (result,),
+        CampaignManifest(1, "sqlite:///:memory:", "exp-1", "campaign", "results.json"),
+        get_trace=lambda *_args, **_kwargs: trace,
+        log_feedback=lambda **kwargs: logged.append(kwargs),
+        override_feedback=lambda **kwargs: overridden.append(kwargs),
+    )
+
+    assert len(overridden) == 1
+    assert overridden[0]["assessment_id"] == "assessment-old"
+    assert all(item["name"] != PART1_FEEDBACK_NAMES["tool_selection"] for item in logged)
+
+
 def test_wrong_tracking_store_or_experiment_fails_clearly() -> None:
     manifest = CampaignManifest(1, "sqlite:///:memory:", "exp-1", "campaign", "results.json")
     with pytest.raises(RuntimeError, match="missing from campaign tracking store"):
@@ -375,3 +400,127 @@ def test_stored_trace_rescoring_uses_current_references_without_agent_rerun(
         "context_precision": 0.625,
         "context_recall": 0.625,
     }
+
+
+def test_cedar_goal_uses_completed_transformation_not_artifact_name() -> None:
+    case = next(
+        item for item in load_agent_evaluation_cases() if item.case_id == "retrieve_exact_draft"
+    )
+    comparisons = (
+        ParameterComparison(0, "query", True, ("cedar", "manifesto"), "Cedar manifesto"),
+        ParameterComparison(1, "artifact_id", True, "expected", "expected"),
+    )
+
+    def trace(writer: str, verdict: str) -> object:
+        return SimpleNamespace(
+            data=SimpleNamespace(
+                spans=[
+                    SimpleNamespace(
+                        parent_id=None,
+                        attributes={
+                            "evaluation.candidate_answer": (
+                                f"✍️ Writer\n\n{writer}\n\n🔍 Critic\n\n"
+                                f"Verdict: {verdict}\n\nSummary: review"
+                            )
+                        },
+                    )
+                ]
+            )
+        )
+
+    assert reporting._frozen_exact_draft_goal(
+        trace("Build patiently, publish warmly, and revise with evidence.", "PASS"),
+        case,
+        comparisons,
+    )
+    assert not reporting._frozen_exact_draft_goal(
+        trace(
+            "Cedar manifesto full draft. Build patiently, publish clearly, revise with evidence.",
+            "PASS",
+        ),
+        case,
+        comparisons,
+    )
+    assert not reporting._frozen_exact_draft_goal(
+        trace("Cedar is mentioned but no accepted workflow completed.", "REVISE"),
+        case,
+        comparisons,
+    )
+
+
+def test_frozen_authoritative_results_rescore_to_correct_part1_totals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = Path("evaluation/agent/final-results.json")
+    if not path.exists():
+        pytest.skip("frozen authoritative campaign artifact is not available")
+    results = load_run_results(path)
+    cases = load_agent_evaluation_cases()
+    traces: dict[str, object] = {}
+    for result in results:
+        comparison_values = {
+            (item.call_index, item.field): item.observed for item in result.parameter_comparisons
+        }
+        spans = [
+            SimpleNamespace(
+                parent_id=None,
+                span_type=SpanType.AGENT,
+                attributes={
+                    "evaluation.candidate_answer": (
+                        "✍️ Writer\n\nA warmer complete rewrite preserving the source facts."
+                        "\n\n🔍 Critic\n\nVerdict: PASS\n\nSummary: accepted"
+                        if result.case_id == "retrieve_exact_draft"
+                        else "completed"
+                    )
+                },
+            )
+        ]
+        for index, tool in enumerate(result.tool_trajectory):
+            arguments = (
+                {
+                    "query": comparison_values.get((index, "query"), "historical draft"),
+                    "created_from": comparison_values.get((index, "created_from")),
+                    "created_to": comparison_values.get((index, "created_to")),
+                    "prefer_recent": comparison_values.get((index, "prefer_recent"), False),
+                    "top_k": comparison_values.get((index, "top_k"), 5),
+                    "rerank": comparison_values.get((index, "rerank"), False),
+                }
+                if tool == "search_corpus"
+                else {"artifact_id": comparison_values.get((index, "artifact_id"), "artifact")}
+            )
+            spans.append(
+                SimpleNamespace(
+                    parent_id="root",
+                    span_type=SpanType.TOOL,
+                    start_time_ns=index,
+                    span_id=f"tool-{index}",
+                    name=tool,
+                    attributes={"tool.name": tool, "tool.arguments": arguments},
+                )
+            )
+        traces[result.trace_id] = SimpleNamespace(data=SimpleNamespace(spans=spans))
+    monkeypatch.setattr(
+        reporting.mlflow,
+        "get_trace",
+        lambda trace_id, **_kwargs: traces[trace_id],
+    )
+    rescored = rescore_part1_from_stored_traces(
+        results,
+        cases,
+        CampaignManifest(1, "sqlite:///:memory:", "1", "campaign", str(path)),
+    )
+    summary = aggregate_campaign(rescored)
+    fields = [
+        comparison.passed for result in rescored for comparison in result.parameter_comparisons
+    ]
+    patterns = {case.case_id: case.pattern for case in summary.cases}
+
+    assert sum(result.trajectory_passed for result in rescored) == 36
+    assert sum(result.parameters_passed for result in rescored) == 34
+    assert (sum(fields), len(fields)) == (49, 51)
+    assert sum(result.goal_completion_passed for result in rescored) == 35
+    assert summary.suite.overall_successful_runs == 33
+    assert summary.suite.mixed_result_scenarios == 2
+    assert patterns["chat_simple"] == "2/3"
+    assert patterns["write_with_memory"] == "1/3"
+    assert patterns["retrieve_exact_draft"] == "3/3"

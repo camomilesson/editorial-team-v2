@@ -265,13 +265,20 @@ def test_failed_invocation_preserves_persisted_trace_id() -> None:
     class Executor:
         def execute(self, *args: object, **kwargs: object) -> AgentInvocation:
             del args, kwargs
-            raise AgentRunFailure("tr-persisted", "ConversationServiceError: Coordinator failed")
+            raise AgentRunFailure(
+                "tr-persisted",
+                "ConversationServiceError: Coordinator failed",
+                trace=_trace(()),
+            )
 
     results = run_agent_evaluation((case,), Executor())
 
     assert len(results) == 3
     assert {result.trace_id for result in results} == {"tr-persisted"}
     assert {result.error for result in results} == {"ConversationServiceError: Coordinator failed"}
+    assert all(result.trajectory_passed for result in results)
+    assert all(result.parameters_passed for result in results)
+    assert all(not result.goal_completion_passed for result in results)
 
 
 def test_failed_trace_lookup_joins_case_and_run(monkeypatch: pytest.MonkeyPatch) -> None:

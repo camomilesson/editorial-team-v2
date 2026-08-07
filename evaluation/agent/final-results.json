@@ -1,0 +1,1493 @@
+[
+  {
+    "accepted_trajectories": [
+      []
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "chat_simple",
+    "conversation_id": "eval-chat-simple-r1",
+    "error": "ConversationServiceError: Coordinator failed",
+    "generation_scores": null,
+    "goal_completion_passed": false,
+    "parameter_comparisons": [],
+    "parameters_passed": false,
+    "request_origin": "batch",
+    "retrieval_scores": null,
+    "run_number": 1,
+    "thread_id": "editorial:v1:eval-chat-simple-r1",
+    "tool_trajectory": [],
+    "trace_id": "tr-a057b4e7c91b604ee50ec3f793f62089",
+    "trajectory_passed": false
+  },
+  {
+    "accepted_trajectories": [
+      []
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "chat_simple",
+    "conversation_id": "eval-chat-simple-r2",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": null,
+    "run_number": 2,
+    "thread_id": "editorial:v1:eval-chat-simple-r2",
+    "tool_trajectory": [],
+    "trace_id": "tr-e7e341cadac74eb88b22ec6f9d976557",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      []
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "chat_simple",
+    "conversation_id": "eval-chat-simple-r3",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": null,
+    "run_number": 3,
+    "thread_id": "editorial:v1:eval-chat-simple-r3",
+    "tool_trajectory": [],
+    "trace_id": "tr-43af32648b5b3fc71dc848983dfecb12",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      []
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "write_from_prompt",
+    "conversation_id": "eval-write-from-prompt-r1",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": null,
+    "run_number": 1,
+    "thread_id": "editorial:v1:eval-write-from-prompt-r1",
+    "tool_trajectory": [],
+    "trace_id": "tr-2389dcb4316ffe4f8188bc6b8f1b2642",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      []
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "write_from_prompt",
+    "conversation_id": "eval-write-from-prompt-r2",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": null,
+    "run_number": 2,
+    "thread_id": "editorial:v1:eval-write-from-prompt-r2",
+    "tool_trajectory": [],
+    "trace_id": "tr-6b82367895b8e73f86d08734fae7cd17",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      []
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "write_from_prompt",
+    "conversation_id": "eval-write-from-prompt-r3",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": null,
+    "run_number": 3,
+    "thread_id": "editorial:v1:eval-write-from-prompt-r3",
+    "tool_trajectory": [],
+    "trace_id": "tr-0226a0b021a7ec064d2dd9d905fd27a7",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "write_with_memory",
+    "conversation_id": "eval-write-with-memory-r1",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 0.5,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "faithfulness": 1.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "aurora"
+        ],
+        "field": "query",
+        "observed": "Aurora notes",
+        "passed": true
+      },
+      {
+        "call_index": 0,
+        "expected": 5,
+        "field": "top_k",
+        "observed": 5,
+        "passed": true
+      },
+      {
+        "call_index": 0,
+        "expected": false,
+        "field": "prefer_recent",
+        "observed": true,
+        "passed": false
+      },
+      {
+        "call_index": 0,
+        "expected": false,
+        "field": "rerank",
+        "observed": false,
+        "passed": true
+      }
+    ],
+    "parameters_passed": false,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 1,
+    "thread_id": "editorial:v1:eval-write-with-memory-r1",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-af648d80ffabd8ba5058f459819918cd",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "write_with_memory",
+    "conversation_id": "eval-write-with-memory-r2",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 0.6,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "faithfulness": 1.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "aurora"
+        ],
+        "field": "query",
+        "observed": "Aurora notes",
+        "passed": true
+      },
+      {
+        "call_index": 0,
+        "expected": 5,
+        "field": "top_k",
+        "observed": 5,
+        "passed": true
+      },
+      {
+        "call_index": 0,
+        "expected": false,
+        "field": "prefer_recent",
+        "observed": false,
+        "passed": true
+      },
+      {
+        "call_index": 0,
+        "expected": false,
+        "field": "rerank",
+        "observed": false,
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 2,
+    "thread_id": "editorial:v1:eval-write-with-memory-r2",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-6fec3873668b17ca1c0fb77f303876f7",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "write_with_memory",
+    "conversation_id": "eval-write-with-memory-r3",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 0.4,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "faithfulness": 1.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "aurora"
+        ],
+        "field": "query",
+        "observed": "Aurora notes",
+        "passed": true
+      },
+      {
+        "call_index": 0,
+        "expected": 5,
+        "field": "top_k",
+        "observed": 5,
+        "passed": true
+      },
+      {
+        "call_index": 0,
+        "expected": false,
+        "field": "prefer_recent",
+        "observed": true,
+        "passed": false
+      },
+      {
+        "call_index": 0,
+        "expected": false,
+        "field": "rerank",
+        "observed": false,
+        "passed": true
+      }
+    ],
+    "parameters_passed": false,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 3,
+    "thread_id": "editorial:v1:eval-write-with-memory-r3",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-4bba5ecf9757026a93287407253593bd",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "retrieve_exact_draft",
+    "conversation_id": "eval-retrieve-exact-draft-r1",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 0.8,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "faithfulness": 1.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "cedar",
+          "manifesto"
+        ],
+        "field": "query",
+        "observed": "Cedar manifesto",
+        "passed": true
+      },
+      {
+        "call_index": 1,
+        "expected": "artifact-v1-cfe5848e9771b8a9959e35b53c24fdab023e0f577da69747e8c62e3447689a68",
+        "field": "artifact_id",
+        "observed": "artifact-v1-cfe5848e9771b8a9959e35b53c24fdab023e0f577da69747e8c62e3447689a68",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 1,
+    "thread_id": "editorial:v1:eval-retrieve-exact-draft-r1",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-377b56a2616fbbc5b59735e6d80ca71d",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "retrieve_exact_draft",
+    "conversation_id": "eval-retrieve-exact-draft-r2",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 0.8,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "faithfulness": 1.0
+    },
+    "goal_completion_passed": false,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "cedar",
+          "manifesto"
+        ],
+        "field": "query",
+        "observed": "Cedar manifesto",
+        "passed": true
+      },
+      {
+        "call_index": 1,
+        "expected": "artifact-v1-cfe5848e9771b8a9959e35b53c24fdab023e0f577da69747e8c62e3447689a68",
+        "field": "artifact_id",
+        "observed": "artifact-v1-cfe5848e9771b8a9959e35b53c24fdab023e0f577da69747e8c62e3447689a68",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 2,
+    "thread_id": "editorial:v1:eval-retrieve-exact-draft-r2",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-cff06c827fdb6ff3308085b3a5e76791",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "retrieve_exact_draft",
+    "conversation_id": "eval-retrieve-exact-draft-r3",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 0.8,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "faithfulness": 1.0
+    },
+    "goal_completion_passed": false,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "cedar",
+          "manifesto"
+        ],
+        "field": "query",
+        "observed": "Cedar manifesto",
+        "passed": true
+      },
+      {
+        "call_index": 1,
+        "expected": "artifact-v1-cfe5848e9771b8a9959e35b53c24fdab023e0f577da69747e8c62e3447689a68",
+        "field": "artifact_id",
+        "observed": "artifact-v1-cfe5848e9771b8a9959e35b53c24fdab023e0f577da69747e8c62e3447689a68",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 3,
+    "thread_id": "editorial:v1:eval-retrieve-exact-draft-r3",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-6699be66037a3c3265808ca465b082ce",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "retrieve_latest_topic",
+    "conversation_id": "eval-retrieve-latest-topic-r1",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 1.0,
+      "context_precision": 0.5,
+      "context_recall": 1.0,
+      "faithfulness": 1.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "solstice"
+        ],
+        "field": "query",
+        "observed": "Solstice",
+        "passed": true
+      },
+      {
+        "call_index": 0,
+        "expected": true,
+        "field": "prefer_recent",
+        "observed": true,
+        "passed": true
+      },
+      {
+        "call_index": 1,
+        "expected": "artifact-v1-dc5593fc580c72ab4fef731981f47b7fbc1693dcd1be37908ada52103f34b2a6",
+        "field": "artifact_id",
+        "observed": "artifact-v1-dc5593fc580c72ab4fef731981f47b7fbc1693dcd1be37908ada52103f34b2a6",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 0.5,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 1,
+    "thread_id": "editorial:v1:eval-retrieve-latest-topic-r1",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-385bc2d9d3baafd162f7083af4fef72b",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "retrieve_latest_topic",
+    "conversation_id": "eval-retrieve-latest-topic-r2",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 1.0,
+      "context_precision": 0.5,
+      "context_recall": 1.0,
+      "faithfulness": 1.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "solstice"
+        ],
+        "field": "query",
+        "observed": "Solstice",
+        "passed": true
+      },
+      {
+        "call_index": 0,
+        "expected": true,
+        "field": "prefer_recent",
+        "observed": true,
+        "passed": true
+      },
+      {
+        "call_index": 1,
+        "expected": "artifact-v1-dc5593fc580c72ab4fef731981f47b7fbc1693dcd1be37908ada52103f34b2a6",
+        "field": "artifact_id",
+        "observed": "artifact-v1-dc5593fc580c72ab4fef731981f47b7fbc1693dcd1be37908ada52103f34b2a6",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 0.5,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 2,
+    "thread_id": "editorial:v1:eval-retrieve-latest-topic-r2",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-6d68de3c83ca1d6dbb28f7576746d6fb",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "retrieve_latest_topic",
+    "conversation_id": "eval-retrieve-latest-topic-r3",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 1.0,
+      "context_precision": 0.5,
+      "context_recall": 1.0,
+      "faithfulness": 1.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "solstice"
+        ],
+        "field": "query",
+        "observed": "Solstice",
+        "passed": true
+      },
+      {
+        "call_index": 0,
+        "expected": true,
+        "field": "prefer_recent",
+        "observed": true,
+        "passed": true
+      },
+      {
+        "call_index": 1,
+        "expected": "artifact-v1-dc5593fc580c72ab4fef731981f47b7fbc1693dcd1be37908ada52103f34b2a6",
+        "field": "artifact_id",
+        "observed": "artifact-v1-dc5593fc580c72ab4fef731981f47b7fbc1693dcd1be37908ada52103f34b2a6",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 0.5,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 3,
+    "thread_id": "editorial:v1:eval-retrieve-latest-topic-r3",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-b643fb32b000538740700144f41dfde7",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "retrieve_recent_period",
+    "conversation_id": "eval-retrieve-recent-period-r1",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 0.6,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "faithfulness": 1.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": "2026-07-27T00:00:00+00:00",
+        "field": "created_from",
+        "observed": "2026-07-27T00:00:00Z",
+        "passed": true
+      },
+      {
+        "call_index": 0,
+        "expected": "2026-08-02T23:59:59+00:00",
+        "field": "created_to",
+        "observed": "2026-08-02T23:59:59Z",
+        "passed": true
+      },
+      {
+        "call_index": 1,
+        "expected": "artifact-v1-44f0cd8d907f350b53d10f8c48fb10929498fb7ffa4571a522b3520bcb92826a",
+        "field": "artifact_id",
+        "observed": "artifact-v1-44f0cd8d907f350b53d10f8c48fb10929498fb7ffa4571a522b3520bcb92826a",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 1,
+    "thread_id": "editorial:v1:eval-retrieve-recent-period-r1",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-f788e7793cd0621785f36fa0d3bf6432",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "retrieve_recent_period",
+    "conversation_id": "eval-retrieve-recent-period-r2",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 0.4,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "faithfulness": 1.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": "2026-07-27T00:00:00+00:00",
+        "field": "created_from",
+        "observed": "2026-07-27T00:00:00Z",
+        "passed": true
+      },
+      {
+        "call_index": 0,
+        "expected": "2026-08-02T23:59:59+00:00",
+        "field": "created_to",
+        "observed": "2026-08-02T23:59:59Z",
+        "passed": true
+      },
+      {
+        "call_index": 1,
+        "expected": "artifact-v1-44f0cd8d907f350b53d10f8c48fb10929498fb7ffa4571a522b3520bcb92826a",
+        "field": "artifact_id",
+        "observed": "artifact-v1-44f0cd8d907f350b53d10f8c48fb10929498fb7ffa4571a522b3520bcb92826a",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 2,
+    "thread_id": "editorial:v1:eval-retrieve-recent-period-r2",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-c24a914a5711e5001628e4a14c504c20",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "retrieve_recent_period",
+    "conversation_id": "eval-retrieve-recent-period-r3",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 0.5,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "faithfulness": 1.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": "2026-07-27T00:00:00+00:00",
+        "field": "created_from",
+        "observed": "2026-07-27T00:00:00Z",
+        "passed": true
+      },
+      {
+        "call_index": 0,
+        "expected": "2026-08-02T23:59:59+00:00",
+        "field": "created_to",
+        "observed": "2026-08-02T23:59:59Z",
+        "passed": true
+      },
+      {
+        "call_index": 1,
+        "expected": "artifact-v1-44f0cd8d907f350b53d10f8c48fb10929498fb7ffa4571a522b3520bcb92826a",
+        "field": "artifact_id",
+        "observed": "artifact-v1-44f0cd8d907f350b53d10f8c48fb10929498fb7ffa4571a522b3520bcb92826a",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 3,
+    "thread_id": "editorial:v1:eval-retrieve-recent-period-r3",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-af733fc362e64c79168bd97aede6b2e2",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      []
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "active_revision",
+    "conversation_id": "eval-active-revision-r1",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": null,
+    "run_number": 1,
+    "thread_id": "editorial:v1:eval-active-revision-r1",
+    "tool_trajectory": [],
+    "trace_id": "tr-0665f00771b84cae0ba62e9f5e9aafc4",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      []
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "active_revision",
+    "conversation_id": "eval-active-revision-r2",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": null,
+    "run_number": 2,
+    "thread_id": "editorial:v1:eval-active-revision-r2",
+    "tool_trajectory": [],
+    "trace_id": "tr-d164a4a7eb4d8b605db5a146363b8a30",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      []
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "active_revision",
+    "conversation_id": "eval-active-revision-r3",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": null,
+    "run_number": 3,
+    "thread_id": "editorial:v1:eval-active-revision-r3",
+    "tool_trajectory": [],
+    "trace_id": "tr-6c5c1dc39301997b6076daf390449ec8",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "historical_revision",
+    "conversation_id": "eval-historical-revision-r1",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 1.0,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "faithfulness": 0.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "orbit"
+        ],
+        "field": "query",
+        "observed": "Orbit launch draft",
+        "passed": true
+      },
+      {
+        "call_index": 1,
+        "expected": "artifact-v1-810f4692b23e3fad258092cfb0b3d41d49722abc5b88b98c00fb1dc0742610fb",
+        "field": "artifact_id",
+        "observed": "artifact-v1-810f4692b23e3fad258092cfb0b3d41d49722abc5b88b98c00fb1dc0742610fb",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 1,
+    "thread_id": "editorial:v1:eval-historical-revision-r1",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-1ed8a55645685c003e0dd45b69677108",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "historical_revision",
+    "conversation_id": "eval-historical-revision-r2",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 0.2,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "faithfulness": 0.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "orbit"
+        ],
+        "field": "query",
+        "observed": "Orbit launch draft",
+        "passed": true
+      },
+      {
+        "call_index": 1,
+        "expected": "artifact-v1-810f4692b23e3fad258092cfb0b3d41d49722abc5b88b98c00fb1dc0742610fb",
+        "field": "artifact_id",
+        "observed": "artifact-v1-810f4692b23e3fad258092cfb0b3d41d49722abc5b88b98c00fb1dc0742610fb",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 2,
+    "thread_id": "editorial:v1:eval-historical-revision-r2",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-681593dacc731ffbfe319e3bdd50cbad",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "historical_revision",
+    "conversation_id": "eval-historical-revision-r3",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 1.0,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "faithfulness": 1.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "orbit"
+        ],
+        "field": "query",
+        "observed": "Orbit launch draft",
+        "passed": true
+      },
+      {
+        "call_index": 1,
+        "expected": "artifact-v1-810f4692b23e3fad258092cfb0b3d41d49722abc5b88b98c00fb1dc0742610fb",
+        "field": "artifact_id",
+        "observed": "artifact-v1-810f4692b23e3fad258092cfb0b3d41d49722abc5b88b98c00fb1dc0742610fb",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 3,
+    "thread_id": "editorial:v1:eval-historical-revision-r3",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-733ca2e1ea75477fc8be46a43ade656e",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus"
+      ],
+      [
+        "search_corpus",
+        "search_corpus"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "search_no_match",
+    "conversation_id": "eval-search-no-match-r1",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "zephyr",
+          "submarine"
+        ],
+        "field": "query",
+        "observed": "Zephyr submarine launch",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": null,
+    "run_number": 1,
+    "thread_id": "editorial:v1:eval-search-no-match-r1",
+    "tool_trajectory": [
+      "search_corpus",
+      "search_corpus"
+    ],
+    "trace_id": "tr-0177901fe0a0724d05a168e83a3c8b00",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus"
+      ],
+      [
+        "search_corpus",
+        "search_corpus"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "search_no_match",
+    "conversation_id": "eval-search-no-match-r2",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "zephyr",
+          "submarine"
+        ],
+        "field": "query",
+        "observed": "Zephyr submarine launch",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": null,
+    "run_number": 2,
+    "thread_id": "editorial:v1:eval-search-no-match-r2",
+    "tool_trajectory": [
+      "search_corpus",
+      "search_corpus"
+    ],
+    "trace_id": "tr-62c0d4f3bc90dd8faaaec112f522dd0c",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus"
+      ],
+      [
+        "search_corpus",
+        "search_corpus"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "search_no_match",
+    "conversation_id": "eval-search-no-match-r3",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "zephyr",
+          "submarine"
+        ],
+        "field": "query",
+        "observed": "Zephyr submarine launch",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": null,
+    "run_number": 3,
+    "thread_id": "editorial:v1:eval-search-no-match-r3",
+    "tool_trajectory": [
+      "search_corpus",
+      "search_corpus"
+    ],
+    "trace_id": "tr-e1aaecb00f0eccd0f559a1af2bf15dd9",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "retrieval_rerank",
+    "conversation_id": "eval-retrieval-rerank-r1",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 1.0,
+      "context_precision": 0.5,
+      "context_recall": 1.0,
+      "faithfulness": 0.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "atlas",
+          "product",
+          "editorial"
+        ],
+        "field": "query",
+        "observed": "Atlas product launch editorial research",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 1,
+    "thread_id": "editorial:v1:eval-retrieval-rerank-r1",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-0d201724ca03cbb26e4a23daf1a1cc04",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "retrieval_rerank",
+    "conversation_id": "eval-retrieval-rerank-r2",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 1.0,
+      "context_precision": 0.5,
+      "context_recall": 1.0,
+      "faithfulness": 0.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "atlas",
+          "product",
+          "editorial"
+        ],
+        "field": "query",
+        "observed": "Atlas product launch editorial research",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 2,
+    "thread_id": "editorial:v1:eval-retrieval-rerank-r2",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-000f515335d39bd9d83f89c86fb37ba7",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "retrieval_rerank",
+    "conversation_id": "eval-retrieval-rerank-r3",
+    "error": null,
+    "generation_scores": {
+      "answer_relevance": 1.0,
+      "context_precision": 0.5,
+      "context_recall": 1.0,
+      "faithfulness": 0.0
+    },
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "atlas",
+          "product",
+          "editorial"
+        ],
+        "field": "query",
+        "observed": "Atlas product launch editorial research",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0
+    },
+    "run_number": 3,
+    "thread_id": "editorial:v1:eval-retrieval-rerank-r3",
+    "tool_trajectory": [
+      "search_corpus",
+      "get_draft"
+    ],
+    "trace_id": "tr-96c88ff85a08dd55517f40f9d487e63e",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus"
+      ],
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "ambiguous_reference",
+    "conversation_id": "eval-ambiguous-reference-r1",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "meridian",
+          "announcement"
+        ],
+        "field": "query",
+        "observed": "Meridian announcement",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.4,
+      "recall_at_5": 1.0
+    },
+    "run_number": 1,
+    "thread_id": "editorial:v1:eval-ambiguous-reference-r1",
+    "tool_trajectory": [
+      "search_corpus"
+    ],
+    "trace_id": "tr-c9ca4350196ac5e64c256d64df4a3cc5",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus"
+      ],
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "ambiguous_reference",
+    "conversation_id": "eval-ambiguous-reference-r2",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "meridian",
+          "announcement"
+        ],
+        "field": "query",
+        "observed": "Meridian announcement",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.4,
+      "recall_at_5": 1.0
+    },
+    "run_number": 2,
+    "thread_id": "editorial:v1:eval-ambiguous-reference-r2",
+    "tool_trajectory": [
+      "search_corpus"
+    ],
+    "trace_id": "tr-94ccc12463defb55b5569187c9eeb961",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      [
+        "search_corpus"
+      ],
+      [
+        "search_corpus",
+        "get_draft"
+      ]
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "ambiguous_reference",
+    "conversation_id": "eval-ambiguous-reference-r3",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [
+      {
+        "call_index": 0,
+        "expected": [
+          "meridian",
+          "announcement"
+        ],
+        "field": "query",
+        "observed": "Meridian announcement",
+        "passed": true
+      }
+    ],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": {
+      "mrr_at_5": 1.0,
+      "precision_at_5": 0.4,
+      "recall_at_5": 1.0
+    },
+    "run_number": 3,
+    "thread_id": "editorial:v1:eval-ambiguous-reference-r3",
+    "tool_trajectory": [
+      "search_corpus"
+    ],
+    "trace_id": "tr-636f138a0ff7b07f4f9df71a11ff434d",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      []
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "tool_restraint",
+    "conversation_id": "eval-tool-restraint-r1",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": null,
+    "run_number": 1,
+    "thread_id": "editorial:v1:eval-tool-restraint-r1",
+    "tool_trajectory": [],
+    "trace_id": "tr-71a54eaadf53d0df39ea05a9200af9f5",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      []
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "tool_restraint",
+    "conversation_id": "eval-tool-restraint-r2",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": null,
+    "run_number": 2,
+    "thread_id": "editorial:v1:eval-tool-restraint-r2",
+    "tool_trajectory": [],
+    "trace_id": "tr-9fdd6ee29fd55224faca1468c8f01a29",
+    "trajectory_passed": true
+  },
+  {
+    "accepted_trajectories": [
+      []
+    ],
+    "agent_temperature": 0.2,
+    "case_id": "tool_restraint",
+    "conversation_id": "eval-tool-restraint-r3",
+    "error": null,
+    "generation_scores": null,
+    "goal_completion_passed": true,
+    "parameter_comparisons": [],
+    "parameters_passed": true,
+    "request_origin": "batch",
+    "retrieval_scores": null,
+    "run_number": 3,
+    "thread_id": "editorial:v1:eval-tool-restraint-r3",
+    "tool_trajectory": [],
+    "trace_id": "tr-1523e7d378e1e8244cf93536f9a77d83",
+    "trajectory_passed": true
+  }
+]

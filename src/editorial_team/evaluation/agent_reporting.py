@@ -26,6 +26,7 @@ from editorial_team.evaluation.agent_harness import (
     RUNS_PER_CASE,
     AgentRunResult,
     ParameterComparison,
+    compare_parameters,
 )
 from editorial_team.evaluation.generation_judges import GenerationMetric, StructuredGenerationJudge
 from editorial_team.evaluation.generation_models import GenerationContext
@@ -35,6 +36,7 @@ from editorial_team.evaluation.trace_adapters import (
     RetrievalReference,
     trace_to_generation_judge_input,
     trace_to_retrieval_scorer_input,
+    trace_to_tool_calls,
 )
 from editorial_team.safety import score_trace_safety
 
@@ -285,6 +287,7 @@ def log_campaign_feedback(
     *,
     get_trace: Callable[..., Any] = mlflow.get_trace,
     log_feedback: Callable[..., Any] = mlflow.log_feedback,
+    override_feedback: Callable[..., Any] = mlflow.override_feedback,
 ) -> int:
     """Attach bounded numeric feedback after validating every trace in its explicit store."""
 
@@ -304,11 +307,14 @@ def log_campaign_feedback(
                 raise RuntimeError(f"trace {result.trace_id} belongs to a different experiment")
             metrics = _feedback_values(result)
             for name, value in metrics.items():
-                log_feedback(
+                _upsert_feedback(
+                    trace,
                     trace_id=result.trace_id,
                     name=name,
                     value=value,
                     metadata={"case_id": result.case_id, "run_number": result.run_number},
+                    log_feedback=log_feedback,
+                    override_feedback=override_feedback,
                 )
                 logged += 1
     return logged
@@ -374,6 +380,48 @@ def replace_scores(
             result.generation_scores if generation_scores is None else generation_scores
         ),
     )
+
+
+def rescore_part1_from_stored_traces(
+    results: Sequence[AgentRunResult],
+    cases: Sequence[AgentEvaluationCase],
+    manifest: CampaignManifest,
+) -> tuple[AgentRunResult, ...]:
+    """Correct Part 1 values from frozen traces without agent or scorer-model execution."""
+
+    case_map = {case.case_id: case for case in cases}
+    output: list[AgentRunResult] = []
+    for result in results:
+        case = case_map.get(result.case_id)
+        if case is None:
+            raise ValueError(f"no declared case exists for {result.case_id}")
+        if not result.trace_id:
+            output.append(result)
+            continue
+        location = manifest.location_for(result.trace_id)
+        with _tracking_store(location.tracking_uri):
+            trace = mlflow.get_trace(result.trace_id, flush=True)
+        if trace is None:
+            raise RuntimeError(f"trace {result.trace_id} is missing from campaign tracking store")
+        calls = trace_to_tool_calls(trace)
+        trajectory = tuple(call.tool for call in calls)
+        comparisons = compare_parameters(calls, case.parameter_expectations)
+        goal = result.goal_completion_passed
+        if result.error is not None:
+            goal = False
+        elif case.case_id == "retrieve_exact_draft":
+            goal = _frozen_exact_draft_goal(trace, case, comparisons)
+        output.append(
+            replace(
+                result,
+                tool_trajectory=trajectory,
+                trajectory_passed=trajectory in case.accepted_trajectories,
+                parameter_comparisons=comparisons,
+                parameters_passed=all(item.passed for item in comparisons),
+                goal_completion_passed=goal,
+            )
+        )
+    return tuple(output)
 
 
 def rescore_stored_traces(
@@ -470,6 +518,58 @@ def _feedback_values(result: AgentRunResult) -> dict[str, float]:
                     raise ValueError(f"feedback score {key} is invalid")
                 values[name] = float(value)
     return values
+
+
+def _frozen_exact_draft_goal(
+    trace: Any,
+    case: AgentEvaluationCase,
+    comparisons: Sequence[ParameterComparison],
+) -> bool:
+    if (
+        len(case.setup.artifacts) != 1
+        or not comparisons
+        or not all(item.passed for item in comparisons)
+    ):
+        return False
+    roots = [span for span in trace.data.spans if span.parent_id is None]
+    if len(roots) != 1:
+        return False
+    candidate = roots[0].attributes.get("evaluation.candidate_answer")
+    if not isinstance(candidate, str) or "✍️ Writer\n\n" not in candidate:
+        return False
+    writer = candidate.split("✍️ Writer\n\n", 1)[1].split("\n\n🔍 Critic", 1)[0].strip()
+    source = case.setup.artifacts[0].content.strip()
+    return bool(writer and writer != source and "Verdict: PASS" in candidate)
+
+
+def _upsert_feedback(
+    trace: Any,
+    *,
+    trace_id: str,
+    name: str,
+    value: float,
+    metadata: dict[str, object],
+    log_feedback: Callable[..., Any],
+    override_feedback: Callable[..., Any],
+) -> None:
+    assessments = getattr(trace.info, "assessments", ()) or ()
+    existing = next(
+        (
+            assessment
+            for assessment in reversed(assessments)
+            if assessment.name == name and assessment.valid is not False
+        ),
+        None,
+    )
+    if existing is None:
+        log_feedback(trace_id=trace_id, name=name, value=value, metadata=metadata)
+    else:
+        override_feedback(
+            trace_id=trace_id,
+            assessment_id=existing.assessment_id,
+            value=value,
+            metadata=metadata,
+        )
 
 
 def _case_references(

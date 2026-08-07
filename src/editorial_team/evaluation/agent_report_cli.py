@@ -12,6 +12,7 @@ from editorial_team.evaluation.agent_reporting import (
     load_run_results,
     log_campaign_feedback,
     log_campaign_safety_feedback,
+    rescore_part1_from_stored_traces,
     rescore_stored_traces,
     write_campaign_summary,
 )
@@ -28,6 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--log-feedback", action="store_true")
     parser.add_argument("--log-safety-feedback", action="store_true")
     parser.add_argument("--rescore-stored", action="store_true")
+    parser.add_argument("--rescore-part1", action="store_true")
     parser.add_argument(
         "--rescore-generation",
         action="store_true",
@@ -46,11 +48,15 @@ def main(argv: list[str] | None = None) -> int:
         args.log_feedback
         or args.log_safety_feedback
         or args.rescore_stored
+        or args.rescore_part1
         or args.rescore_generation
     ) and manifest is None:
         parser.error("--manifest is required for feedback or stored-trace rescoring")
     if args.rescore_generation and not args.rescore_stored:
         parser.error("--rescore-generation requires --rescore-stored")
+
+    if args.rescore_part1:
+        results = rescore_part1_from_stored_traces(results, load_agent_evaluation_cases(), manifest)
 
     if args.rescore_stored:
         judge = (

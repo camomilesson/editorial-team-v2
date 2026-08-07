@@ -104,22 +104,27 @@ class RealAgentRunExecutor(AgentRunExecutor):
                 )
             except Exception as exc:
                 try:
-                    trace_id = _new_stored_trace(
+                    failed_trace = _new_stored_trace(
                         self._experiment_id, before, case.case_id, identity.run_number
-                    ).info.trace_id
+                    )
+                    trace_id = failed_trace.info.trace_id
                 except RuntimeError:
+                    failed_trace = None
                     trace_id = ""
                 public_error = (
                     f"ConversationServiceError: {exc}"
                     if isinstance(exc, ConversationServiceError)
                     else "Evaluation invocation failed"
                 )
-                raise AgentRunFailure(trace_id, public_error) from None
+                raise AgentRunFailure(trace_id, public_error, trace=failed_trace) from None
         finally:
             service.close()
         trace = _new_stored_trace(self._experiment_id, before, case.case_id, identity.run_number)
         response = "\n\n".join(message.content for message in messages)
         facts = {
+            "exact_draft_transformation_completed": _exact_draft_transformation_completed(
+                case, active_after
+            ),
             "active_revision_applied": _active_revision_applied(active_before, active_after),
             "historical_orbit_selected": _historical_orbit_selected(active_after),
             "ember_not_used_as_source": _ember_not_used_as_source(active_before, active_after),
@@ -332,6 +337,21 @@ def _active_revision_applied(before: object, after: object) -> bool:
         and before.brief.original_request == after.brief.original_request
         and before.working_draft != after.working_draft
         and len(after.brief.instructions) > len(before.brief.instructions)
+    )
+
+
+def _exact_draft_transformation_completed(case: AgentEvaluationCase, after: object) -> bool:
+    if case.case_id != "retrieve_exact_draft" or len(case.setup.artifacts) != 1:
+        return False
+    source = case.setup.artifacts[0]
+    return (
+        isinstance(after, WritingTask)
+        and after.brief.original_request == source.user_request
+        and after.working_draft is not None
+        and after.working_draft.strip() != source.content.strip()
+        and after.critic_report is not None
+        and after.critic_report.verdict is CriticVerdict.PASS
+        and after.status in {WritingTaskStatus.REVIEWED, WritingTaskStatus.REVISED}
     )
 
 

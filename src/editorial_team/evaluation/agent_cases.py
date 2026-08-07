@@ -210,7 +210,8 @@ def load_agent_evaluation_cases() -> tuple[AgentEvaluationCase, ...]:
             ("search_corpus", "get_draft"),
             (),
             OutcomeExpectation(
-                "Transforms the complete Cedar draft", required_response_terms=("cedar",)
+                "Transforms the complete Cedar draft",
+                required_facts=("exact_draft_transformation_completed",),
             ),
             (
                 ParameterExpectation(0, "query", "contains_terms", ("cedar", "manifesto")),
