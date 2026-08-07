@@ -12,6 +12,7 @@ from editorial_team.errors import ServiceError
 from editorial_team.mlflow_tracing import (
     RequestOrigin,
     agent_invocation_span,
+    record_batch_candidate_answer,
     validate_request_origin,
 )
 
@@ -78,6 +79,7 @@ class ConversationService:
                 raise ConversationServiceError("Conversation graph returned an invalid result")
             if root_span is not None:
                 root_span.set_attribute("assistant_message_count", len(messages))
+                record_batch_candidate_answer(root_span, messages)
             return messages
 
     def close(self) -> None:

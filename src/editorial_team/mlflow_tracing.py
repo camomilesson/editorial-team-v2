@@ -23,6 +23,17 @@ from mlflow.entities import SpanStatusCode, SpanType
 RequestOrigin = Literal["ui", "api", "batch"]
 REQUEST_ORIGINS = frozenset({"ui", "api", "batch"})
 
+# Stable stored-trace schema shared by instrumentation and pure evaluation adapters.
+ATTR_REQUEST_ORIGIN = "request_origin"
+ATTR_EVAL_CASE_ID = "eval_case_id"
+ATTR_CANDIDATE_ANSWER = "evaluation.candidate_answer"
+ATTR_TOOL_NAME = "tool.name"
+ATTR_TOOL_ARGUMENTS = "tool.arguments"
+ATTR_RETRIEVAL_REQUEST = "retrieval.request"
+ATTR_RETRIEVAL_FINAL_RESULTS = "retrieval.final_results"
+ATTR_RETRIEVAL_CONTEXTS = "retrieval.contexts"
+ATTR_RETRIEVAL_STAGE_RANKINGS = "retrieval.stage_rankings"
+
 _initialization_lock = Lock()
 _initialized = False
 _invocation_origin: ContextVar[RequestOrigin | None] = ContextVar(
@@ -78,11 +89,11 @@ def agent_invocation_span(
         yield None
         return
     attributes: dict[str, Any] = {
-        "request_origin": request_origin,
+        ATTR_REQUEST_ORIGIN: request_origin,
         "eval_case_id_present": eval_case_id is not None,
     }
     if eval_case_id is not None:
-        attributes["eval_case_id"] = eval_case_id
+        attributes[ATTR_EVAL_CASE_ID] = eval_case_id
     started = perf_counter()
     with mlflow.start_span(
         name="editorial_team.conversation_invocation",
@@ -90,9 +101,9 @@ def agent_invocation_span(
         attributes=attributes,
     ) as span:
         origin_token = _invocation_origin.set(request_origin)
-        tags = {"request_origin": request_origin}
+        tags = {ATTR_REQUEST_ORIGIN: request_origin}
         if eval_case_id is not None:
-            tags["eval_case_id"] = eval_case_id
+            tags[ATTR_EVAL_CASE_ID] = eval_case_id
         mlflow.update_current_trace(tags=tags)
         try:
             yield span
@@ -224,8 +235,8 @@ def tool_execution_span(
         return
     started = perf_counter()
     attributes: dict[str, Any] = {
-        "tool.name": name,
-        "tool.arguments": _safe_tool_arguments(name, arguments),
+        ATTR_TOOL_NAME: name,
+        ATTR_TOOL_ARGUMENTS: _safe_tool_arguments(name, arguments),
     }
     if name == "search_corpus":
         attributes["tool.query_retained"] = _invocation_origin.get() == "batch"
@@ -240,6 +251,18 @@ def tool_execution_span(
             yield span
         finally:
             span.set_attribute("latency_ms", (perf_counter() - started) * 1000.0)
+
+
+def record_batch_candidate_answer(span: Any, messages: object) -> None:
+    """Retain only the final delivered batch response required by generation judges."""
+
+    if span is None or _invocation_origin.get() != "batch":
+        return
+    if not isinstance(messages, tuple) or not messages:
+        return
+    contents = [getattr(message, "content", None) for message in messages]
+    if all(isinstance(content, str) for content in contents):
+        span.set_attribute(ATTR_CANDIDATE_ANSWER, "\n\n".join(contents))
 
 
 def record_tool_result(span: Any, output: object) -> None:
@@ -296,7 +319,7 @@ def retrieval_span(request: Any):
     with mlflow.start_span(
         name="corpus_retrieval",
         span_type=SpanType.RETRIEVER,
-        attributes={"retrieval.request": _retrieval_request(request)},
+        attributes={ATTR_RETRIEVAL_REQUEST: _retrieval_request(request)},
     ) as span:
         try:
             yield span
@@ -330,12 +353,12 @@ def record_retrieval_results(span: Any, stages: Any) -> None:
     retain_content = _invocation_origin.get() == "batch"
     attributes: dict[str, Any] = {
         "retrieval.success": True,
-        "retrieval.final_results": final_results,
-        "retrieval.stage_rankings": stage_rankings,
+        ATTR_RETRIEVAL_FINAL_RESULTS: final_results,
+        ATTR_RETRIEVAL_STAGE_RANKINGS: stage_rankings,
         "retrieval.contexts_retained": retain_content,
     }
     if retain_content:
-        attributes["retrieval.contexts"] = [
+        attributes[ATTR_RETRIEVAL_CONTEXTS] = [
             {
                 "chunk_id": item.chunk_id,
                 "artifact_id": item.artifact_id,

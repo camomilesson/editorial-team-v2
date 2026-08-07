@@ -58,7 +58,7 @@ class ModelGraph:
                     "message-1",
                     "conversation-1",
                     MessageRole.ASSISTANT,
-                    f"private output {SECRET}",
+                    "safe final response",
                     NOW,
                 ),
             )
@@ -101,7 +101,7 @@ def test_conversation_trace_has_one_root_child_llm_metadata_and_redaction(
         eval_case_id="case-1",
     )
 
-    assert messages[0].content == f"private output {SECRET}"
+    assert messages[0].content == "safe final response"
     captured = [
         item for item in traces(trace_experiment) if item.info.trace_id not in before
     ]
@@ -114,6 +114,7 @@ def test_conversation_trace_has_one_root_child_llm_metadata_and_redaction(
     assert root.span_type == SpanType.AGENT
     assert root.attributes["request_origin"] == "batch"
     assert root.attributes["eval_case_id"] == "case-1"
+    assert root.attributes["evaluation.candidate_answer"] == "safe final response"
     assert root.attributes["latency_ms"] >= 0
     assert trace.info.tags["request_origin"] == "batch"
     assert trace.info.tags["eval_case_id"] == "case-1"
@@ -157,6 +158,7 @@ def test_eval_case_is_optional_and_default_origin_is_compatible(
     assert root.attributes["request_origin"] == "api"
     assert root.attributes["eval_case_id_present"] is False
     assert "eval_case_id" not in root.attributes
+    assert "evaluation.candidate_answer" not in root.attributes
 
 
 def test_failed_gemini_call_is_sanitized_and_marked_error(trace_experiment: str) -> None:
@@ -342,6 +344,8 @@ def test_ui_policy_redacts_query_and_retrieved_context(trace_experiment: str) ->
     assert retriever.attributes["retrieval.request"]["query_retained"] is False
     assert retriever.attributes["retrieval.contexts_retained"] is False
     assert "retrieval.contexts" not in retriever.attributes
+    root = next(span for span in trace.data.spans if span.parent_id is None)
+    assert "evaluation.candidate_answer" not in root.attributes
     assert SECRET not in trace.to_json()
 
 
