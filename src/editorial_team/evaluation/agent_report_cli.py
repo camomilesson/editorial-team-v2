@@ -11,6 +11,7 @@ from editorial_team.evaluation.agent_reporting import (
     load_campaign_manifest,
     load_run_results,
     log_campaign_feedback,
+    log_campaign_safety_feedback,
     rescore_stored_traces,
     write_campaign_summary,
 )
@@ -25,6 +26,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", type=Path, help="Tracking-store campaign manifest")
     parser.add_argument("--case", action="append", dest="case_ids", help="Include this case")
     parser.add_argument("--log-feedback", action="store_true")
+    parser.add_argument("--log-safety-feedback", action="store_true")
     parser.add_argument("--rescore-stored", action="store_true")
     parser.add_argument(
         "--rescore-generation",
@@ -40,7 +42,12 @@ def main(argv: list[str] | None = None) -> int:
         if {result.case_id for result in results} != set(selected):
             parser.error("--case contains an unknown or absent case ID")
     manifest = load_campaign_manifest(args.manifest) if args.manifest else None
-    if (args.log_feedback or args.rescore_stored or args.rescore_generation) and manifest is None:
+    if (
+        args.log_feedback
+        or args.log_safety_feedback
+        or args.rescore_stored
+        or args.rescore_generation
+    ) and manifest is None:
         parser.error("--manifest is required for feedback or stored-trace rescoring")
     if args.rescore_generation and not args.rescore_stored:
         parser.error("--rescore-generation requires --rescore-stored")
@@ -64,6 +71,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.log_feedback:
         logged = log_campaign_feedback(results, manifest)
         print(f"Logged {logged} feedback assessments")
+    if args.log_safety_feedback:
+        safety = log_campaign_safety_feedback(results, manifest)
+        print(
+            f"Safety traces: {safety.evaluated} evaluated, "
+            f"{safety.unevaluable} unevaluable, {safety.flagged} flagged"
+        )
     print(
         f"Aggregated {summary.suite.total_runs} runs across {summary.suite.total_scenarios} cases"
     )

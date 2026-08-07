@@ -50,9 +50,15 @@ from editorial_team.errors import ServiceError
 from editorial_team.graphs.editorial import EditorialGraphError, build_editorial_subgraph
 from editorial_team.graphs.state import EditorialGraphStateV1, validate_graph_state_version
 from editorial_team.mlflow_tracing import (
+    record_safety_attributes,
     record_tool_exception,
     record_tool_result,
     tool_execution_span,
+)
+from editorial_team.safety import (
+    detect_indirect_instruction,
+    safety_attributes,
+    tool_denial_attributes,
 )
 from editorial_team.tracing import (
     current_trace_stage,
@@ -254,6 +260,7 @@ class _ConversationNodes:
             name = call.get("name")
             tool = tools.get(name)
             if tool is None:
+                record_safety_attributes(tool_denial_attributes("unknown_tool_denied"))
                 output = {
                     "ok": False,
                     "error": {
@@ -267,6 +274,7 @@ class _ConversationNodes:
                     traced_arguments = tool.args_schema.model_validate(raw_arguments).model_dump()
                 except Exception:
                     traced_arguments = raw_arguments
+                    record_safety_attributes(tool_denial_attributes("invalid_tool_schema"))
                 with tool_execution_span(
                     name=str(name),
                     arguments=traced_arguments,
@@ -326,6 +334,11 @@ class _ConversationNodes:
         data = output.get("data")
         if not isinstance(data, dict):
             raise ConversationGraphError("Retrieved draft is invalid")
+        content = data.get("content")
+        if isinstance(content, str):
+            decision = detect_indirect_instruction(content)
+            if decision.flagged:
+                record_safety_attributes(safety_attributes(decision, indirect=True))
         return {
             "ok": True,
             "data": {

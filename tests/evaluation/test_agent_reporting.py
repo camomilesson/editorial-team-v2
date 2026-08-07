@@ -22,6 +22,7 @@ from editorial_team.evaluation.agent_reporting import (
     aggregate_campaign,
     load_run_results,
     log_campaign_feedback,
+    log_campaign_safety_feedback,
     rescore_stored_traces,
 )
 from editorial_team.mlflow_tracing import (
@@ -31,6 +32,12 @@ from editorial_team.mlflow_tracing import (
     ATTR_RETRIEVAL_CONTEXTS,
     ATTR_RETRIEVAL_FINAL_RESULTS,
     ATTR_RETRIEVAL_REQUEST,
+)
+from editorial_team.safety import (
+    ATTR_INPUT_BLOCKED,
+    ATTR_PREFLIGHT_FLAGGED,
+    ATTR_SAFETY_SCHEMA,
+    SAFETY_SCHEMA_VERSION,
 )
 
 
@@ -266,6 +273,43 @@ def test_feedback_uses_the_tracking_location_declared_for_each_trace() -> None:
         (first.trace_id, "sqlite:///:memory:"),
         (second.trace_id, "sqlite:///second.db"),
     ]
+
+
+def test_safety_feedback_attaches_bounded_scores_to_the_origin_trace() -> None:
+    result = _result("safety-case", 1)
+    trace = SimpleNamespace(
+        info=SimpleNamespace(experiment_id="exp-1"),
+        data=SimpleNamespace(
+            spans=[
+                SimpleNamespace(
+                    attributes={
+                        ATTR_SAFETY_SCHEMA: SAFETY_SCHEMA_VERSION,
+                        ATTR_PREFLIGHT_FLAGGED: True,
+                        ATTR_INPUT_BLOCKED: True,
+                    }
+                )
+            ]
+        ),
+    )
+    logged: list[dict[str, object]] = []
+
+    report = log_campaign_safety_feedback(
+        (result,),
+        CampaignManifest(1, "sqlite:///:memory:", "exp-1", "campaign", "results.json"),
+        get_trace=lambda *_args, **_kwargs: trace,
+        log_feedback=lambda **kwargs: logged.append(kwargs),
+    )
+
+    assert report.evaluated == 1
+    assert report.flagged == 1
+    assert report.assessments_logged == 3
+    assert {item["trace_id"] for item in logged} == {result.trace_id}
+    assert {item["name"] for item in logged} == {
+        "safety.threat_detected",
+        "safety.defense_effective",
+        "safety.unsafe_behavior",
+    }
+    assert "secret-canary" not in repr(logged)
 
 
 def test_stored_trace_rescoring_uses_current_references_without_agent_rerun(

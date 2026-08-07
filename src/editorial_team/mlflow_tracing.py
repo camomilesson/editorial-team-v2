@@ -275,6 +275,16 @@ def record_batch_candidate_answer(span: Any, messages: object) -> None:
         span.set_attribute(ATTR_CANDIDATE_ANSWER, "\n\n".join(contents))
 
 
+def record_safety_attributes(attributes: dict[str, object]) -> None:
+    """Attach bounded safety facts to the active trace span without retaining attack text."""
+
+    if not _initialized:
+        return
+    span = mlflow.get_current_active_span()
+    if span is not None:
+        span.set_attributes(attributes)
+
+
 def record_tool_result(span: Any, output: object) -> None:
     """Record bounded status for structured tool results, including logical failures."""
 

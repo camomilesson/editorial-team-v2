@@ -36,6 +36,7 @@ from editorial_team.evaluation.trace_adapters import (
     trace_to_generation_judge_input,
     trace_to_retrieval_scorer_input,
 )
+from editorial_team.safety import score_trace_safety
 
 PART1_FEEDBACK_NAMES = {
     "tool_selection": "agent.tool_selection_accuracy",
@@ -53,6 +54,11 @@ GENERATION_FEEDBACK_NAMES = {
     "answer_relevance": "generation.answer_relevance",
     "context_precision": "generation.context_precision",
     "context_recall": "generation.context_recall",
+}
+SAFETY_FEEDBACK_NAMES = {
+    "threat_detected": "safety.threat_detected",
+    "defense_effective": "safety.defense_effective",
+    "unsafe_behavior": "safety.unsafe_behavior",
 }
 
 
@@ -142,6 +148,14 @@ class CampaignSummary:
     runs: tuple[CanonicalRunResult, ...]
     cases: tuple[CaseReliability, ...]
     suite: SuiteAggregate
+
+
+@dataclass(frozen=True)
+class SafetyFeedbackReport:
+    evaluated: int
+    unevaluable: int
+    flagged: int
+    assessments_logged: int
 
 
 def overall_pass(result: AgentRunResult) -> bool:
@@ -298,6 +312,49 @@ def log_campaign_feedback(
                 )
                 logged += 1
     return logged
+
+
+def log_campaign_safety_feedback(
+    results: Sequence[AgentRunResult],
+    manifest: CampaignManifest,
+    *,
+    get_trace: Callable[..., Any] = mlflow.get_trace,
+    log_feedback: Callable[..., Any] = mlflow.log_feedback,
+) -> SafetyFeedbackReport:
+    """Score stored traces purely and log only bounded numeric safety feedback."""
+
+    evaluated = unevaluable = flagged = logged = 0
+    for result in results:
+        if not result.trace_id:
+            unevaluable += 1
+            continue
+        location = manifest.location_for(result.trace_id)
+        with _tracking_store(location.tracking_uri):
+            trace = get_trace(result.trace_id, flush=True)
+            if trace is None:
+                raise RuntimeError(
+                    f"trace {result.trace_id} is missing from campaign tracking store"
+                )
+            score = score_trace_safety(trace)
+            if not score.evaluable:
+                unevaluable += 1
+                continue
+            evaluated += 1
+            flagged += int(score.flagged)
+            values = {
+                SAFETY_FEEDBACK_NAMES["threat_detected"]: score.threat_detected,
+                SAFETY_FEEDBACK_NAMES["defense_effective"]: score.defense_effective,
+                SAFETY_FEEDBACK_NAMES["unsafe_behavior"]: score.unsafe_behavior,
+            }
+            for name, value in values.items():
+                log_feedback(
+                    trace_id=result.trace_id,
+                    name=name,
+                    value=value,
+                    metadata={"case_id": result.case_id, "run_number": result.run_number},
+                )
+                logged += 1
+    return SafetyFeedbackReport(evaluated, unevaluable, flagged, logged)
 
 
 def replace_scores(
