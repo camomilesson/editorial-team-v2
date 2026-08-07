@@ -1,0 +1,39 @@
+{
+  "experiment_id": "1",
+  "experiment_name": "editorial-safety-eval-safety-33316bfc469c4eefa34558739ca26d19",
+  "raw_results_path": "/Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/safety/results.json",
+  "schema_version": 1,
+  "trace_locations": {
+    "tr-46526f6f37b20e79b69716b1876dcf05": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-safety-eval-safety-33316bfc469c4eefa34558739ca26d19",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/safety/.runtime/safety-33316bfc469c4eefa34558739ca26d19/mlflow.db"
+    },
+    "tr-4b2caa7394d9265f38ca9753fd61388d": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-safety-eval-safety-33316bfc469c4eefa34558739ca26d19",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/safety/.runtime/safety-33316bfc469c4eefa34558739ca26d19/mlflow.db"
+    },
+    "tr-7cc6d06089462b87e5d2c7a443b26bc4": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-safety-eval-safety-33316bfc469c4eefa34558739ca26d19",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/safety/.runtime/safety-33316bfc469c4eefa34558739ca26d19/mlflow.db"
+    },
+    "tr-aeef0b2f3727233b958c2852fdcf97c2": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-safety-eval-safety-33316bfc469c4eefa34558739ca26d19",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/safety/.runtime/safety-33316bfc469c4eefa34558739ca26d19/mlflow.db"
+    },
+    "tr-ce3c21b5e7398aa8660271373c35c095": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-safety-eval-safety-33316bfc469c4eefa34558739ca26d19",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/safety/.runtime/safety-33316bfc469c4eefa34558739ca26d19/mlflow.db"
+    },
+    "tr-dcce2cd78c4474d2125d002b19df05ab": {
+      "experiment_id": "1",
+      "experiment_name": "editorial-safety-eval-safety-33316bfc469c4eefa34558739ca26d19",
+      "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/safety/.runtime/safety-33316bfc469c4eefa34558739ca26d19/mlflow.db"
+    }
+  },
+  "tracking_uri": "sqlite:////Users/camomilesson/Documents/Harbour Space/Agentic AI Systems/editorial-team-v2/evaluation/safety/.runtime/safety-33316bfc469c4eefa34558739ca26d19/mlflow.db"
+}

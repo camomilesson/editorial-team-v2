@@ -107,6 +107,7 @@ def build_conversation_service(
     retrieval_configuration: RetrievalConfiguration | None = None,
     user_timezone: str = "Europe/Madrid",
     clock: Callable[[], datetime] | None = None,
+    protected_output_markers: tuple[str, ...] = (),
 ) -> ConversationService:
     """Wire the real agents around one shared provider-neutral model client."""
 
@@ -193,6 +194,7 @@ def build_conversation_service(
     return ConversationService(
         graph_runner=graph_runner,
         close_checkpointer=close_resources,
+        protected_output_markers=protected_output_markers,
     )
 
 

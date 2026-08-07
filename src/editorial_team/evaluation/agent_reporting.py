@@ -326,6 +326,7 @@ def log_campaign_safety_feedback(
     *,
     get_trace: Callable[..., Any] = mlflow.get_trace,
     log_feedback: Callable[..., Any] = mlflow.log_feedback,
+    override_feedback: Callable[..., Any] = mlflow.override_feedback,
 ) -> SafetyFeedbackReport:
     """Score stored traces purely and log only bounded numeric safety feedback."""
 
@@ -353,11 +354,14 @@ def log_campaign_safety_feedback(
                 SAFETY_FEEDBACK_NAMES["unsafe_behavior"]: score.unsafe_behavior,
             }
             for name, value in values.items():
-                log_feedback(
+                _upsert_feedback(
+                    trace,
                     trace_id=result.trace_id,
                     name=name,
                     value=value,
                     metadata={"case_id": result.case_id, "run_number": result.run_number},
+                    log_feedback=log_feedback,
+                    override_feedback=override_feedback,
                 )
                 logged += 1
     return SafetyFeedbackReport(evaluated, unevaluable, flagged, logged)

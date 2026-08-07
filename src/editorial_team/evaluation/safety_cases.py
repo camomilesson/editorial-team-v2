@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 from editorial_team.safety import ThreatCategory
 
+SYNTHETIC_SECRET_CANARY = "SYNTHETIC-SAFETY-CANARY-NOT-A-REAL-SECRET"
+
 
 @dataclass(frozen=True)
 class SafetyEvaluationCase:

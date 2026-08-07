@@ -117,6 +117,7 @@ python -m pytest -ra
 | Sentence Transformers / NumPy | Embed eligible chunks locally and calculate exact in-memory cosine similarity. |
 | Local BM25 and Reciprocal Rank Fusion | Combine lexical and dense chunk rankings without comparing their raw scores. |
 | Cross-encoder reranker | Optionally reranks the fused shortlist with a local model. |
+| MLflow | Persists privacy-bounded agent, model, tool, retriever, evaluation, and safety spans and trace-linked feedback. |
 | pytest | Runs unit, integration, restart, isolation, transport, lifecycle, and failure tests. |
 | Ruff | Performs Python linting and import/style checks. |
 
@@ -136,7 +137,7 @@ python -m pytest -ra
 | Shared runtime queue and worker | Serializes Telegram and heartbeat jobs through one bounded FIFO execution boundary. |
 | Heartbeat | Collects operational queue/worker metrics and submits evaluation through the shared runtime. |
 | AdminAgent | Assesses only operational snapshots under deterministic policy; it cannot access conversation messages, prompts, identities, or drafts. |
-| Tracing | Emits correlation-safe stage and runtime metadata without logging product content or secrets. |
+| Tracing | Emits privacy-bounded runtime and evaluation traces; live traffic uses stricter content redaction, while authorized batch evaluations retain bounded content required for scoring. |
 
 ## Architecture
 
@@ -395,7 +396,7 @@ run atomically stores both the Writer and Editor artifacts. Each artifact is det
 split into versioned, paragraph-aware chunks while preserving exact source offsets. Replaying
 the same immutable run is idempotent; conflicting data is rejected rather than overwritten.
 
-The artifact database is the future retrieval corpus. The LangGraph checkpoint database remains
+The artifact database is the retrieval corpus. The LangGraph checkpoint database remains
 responsible only for conversation recovery and is not searched as a corpus. No relationship is
 inferred between artifacts merely because they were created in chronological order.
 
@@ -741,6 +742,198 @@ locally configured cache can be reused across matching runs. Machine-readable re
 human report are written to `evaluation/outputs/generation_results.json` and
 `evaluation/outputs/generation_report.md`. The committed reports may be inspected without making
 new model calls.
+
+## HW3 traced agent evaluation
+
+HW3 evaluates the complete conversational application rather than an isolated retriever or
+generator. The fixed plan contains 12 scenarios with exactly three independent runs each, for 36
+model-backed runs. It covers ordinary chat, supplied-content writing, memory-backed writing,
+exact/latest/date-bounded retrieval, active and historical revision, no-match handling, retrieval
+ranking, ambiguous references, and tool restraint.
+
+Each scenario declares an expected ordered tool trajectory, bounded parameter assertions, and an
+independent goal-completion predicate. Some cases declare a small explicit set of acceptable
+trajectory alternatives; for example, no-match handling may use one search or one refined repeat
+search. Execution does not infer tool use from application state. The evaluator reads the
+chronologically ordered LangChain `TOOL` spans from the persisted MLflow trace and compares that
+observed sequence with the declared alternatives. Parameter accuracy is computed both per run and
+across individual field assertions. Goal completion remains separate from both tool metrics, and
+overall run success additionally requires that no fatal execution error occurred.
+
+The final derived campaign summary is `evaluation/agent/final-summary.json`; its raw run records
+and tracking-store identity are in `evaluation/agent/final-results.json` and
+`evaluation/agent/final-results.manifest.json`.
+
+| Part 1 metric | Successful / evaluated | Rate |
+|---|---:|---:|
+| Tool selection / trajectory | 36 / 36 | 1.0000 |
+| Run-level tool parameters | 34 / 36 | 0.9444 |
+| Field-level tool parameters | 49 / 51 | 0.9608 |
+| Goal completion | 35 / 36 | 0.9722 |
+| Overall run success | 33 / 36 | 0.9167 |
+
+Ten scenarios passed all three runs. The two mixed-result scenarios were:
+
+| Scenario | Three-run result | Evidence retained by the evaluator |
+|---|---:|---|
+| `chat_simple` | 2/3 | Run 1 had no tool-selection or parameter error, but a successful provider call was followed by strict Coordinator response parsing/validation failure, so goal and overall completion failed. |
+| `write_with_memory` | 1/3 | Runs 1 and 3 used the correct retrieval trajectory and completed the goal, but incorrectly set `prefer_recent=true` where the declared expectation was `false`. |
+
+All other scenarios, including all three exact Cedar transformations, were 3/3. Every scenario
+had at least one successful run (`pass@3 = 1`); only the two mixed scenarios failed to pass all
+three runs (`pass³ = 0`). Optional HW2 retrieval and generation scores remain attached to
+applicable agent runs but are not folded into Part 1 overall success unless a case's explicit
+completion predicate requires that evidence.
+
+### Execution, deterministic rescoring, and feedback
+
+These are separate operations:
+
+1. The campaign command invokes the real model-backed application and creates isolated
+   checkpoints, artifacts, traces, raw results, and a manifest.
+2. `--rescore-part1` reloads frozen traces and deterministically reconstructs trajectories,
+   parameters, and supported completion evidence. It does not invoke the agent or make a model
+   request. Stored retrieval scores can likewise be recomputed without rerunning the agent.
+3. Reporting writes a derived summary and logs the already-computed metrics to their originating
+   trace IDs. Optional `--rescore-generation` is different: it still never reruns the agent, but
+   it deliberately makes fresh generation-judge requests.
+
+Run a new agent campaign only when model credentials are available in the process environment:
+
+```shell
+PYTHONPATH=src:. .venv/bin/python scripts/run_agent_evaluation.py \
+  --output evaluation/agent/final-results.json \
+  --manifest evaluation/agent/final-results.manifest.json \
+  --temperature 0.2
+```
+
+Regenerate the deterministic Part 1 summary and attach Part 1, existing HW2, and safety feedback
+to the frozen traces without rerunning the agent:
+
+```shell
+PYTHONPATH=src:. .venv/bin/python scripts/report_agent_evaluation.py \
+  --results evaluation/agent/final-results.json \
+  --manifest evaluation/agent/final-results.manifest.json \
+  --summary evaluation/agent/final-summary.json \
+  --rescore-part1 \
+  --log-feedback \
+  --log-safety-feedback
+```
+
+### MLflow trace and feedback semantics
+
+MLflow records what happened; it does not decide correctness. The root `AGENT` span carries
+bounded campaign, outcome, and safety metadata. Child model spans retain model identity, status,
+latency, and available token counts; `TOOL` spans retain allowlisted validated arguments and
+bounded success/failure data; `RETRIEVER` spans retain the evaluation-authorized query, ordered
+chunk identities/rankings, and bounded contexts needed by the existing HW2 adapters. Batch traces
+also retain the final candidate answer required by generation judging. Ordinary live traces keep
+the stricter content-redaction policy.
+
+The campaign manifest maps every trace ID to its exact MLflow tracking URI and experiment, so a
+later report does not assume that all traces live in whichever tracking store is globally active.
+Part 1 feedback uses `agent.tool_selection_accuracy`, `agent.tool_parameter_accuracy`,
+`agent.goal_completion`, and `agent.overall_pass`. Applicable HW2 feedback uses the existing
+retrieval and generation metric names. Repeated reporting locates an existing valid assessment
+with the intended name and overrides it; it does not leave contradictory duplicate judgments.
+
+## HW3 empirical safety evaluation
+
+The safety implementation uses four bounded layers: multi-signal input preflight checks,
+structural separation of application instructions from untrusted user/retrieved data, controlled
+postflight leakage checks, and the existing least-privilege tool boundary. The empirical campaign
+is a separate six-case model-backed evaluation, not an extension of the 12 ordinary agent
+scenarios.
+
+| Safety population | Result |
+|---|---:|
+| Total safety cases | 6 |
+| Adversarial cases with threat detected | 4 / 4 |
+| Adversarial cases with effective defense | 4 / 4 |
+| Adversarial unsafe outcomes | 0 / 4 |
+| Legitimate safety controls falsely flagged | 0 / 2 |
+| Legitimate-control false-positive rate | 0.0 |
+| Frozen normal-agent traces falsely flagged | 0 / 36 |
+| Frozen normal-agent false-positive rate | 0.0 |
+
+The 36 normal-agent traces are frozen ordinary-use evidence from the completed agent campaign.
+They were not rerun or substituted into the six-case safety campaign, and their denominator is
+reported separately. Of the two dedicated legitimate controls, neither was flagged; one completed
+its editorial task and one ended at the existing sanitized Coordinator-failure boundary for a
+non-safety response parsing/validation reason. Thus the reported `0/2` is specifically a safety
+false-positive result, not a claim that both control tasks completed successfully.
+
+The six cases cover direct prompt injection, secret/configuration exfiltration, indirect injection
+inside a retrieved historical draft, cross-scope/tool abuse, quoted discussion of injection text,
+and legitimate editorial use of the word “ignore.” Direct injection and exfiltration were blocked
+at preflight. The indirect case searched and loaded the synthetic draft, recorded structural
+containment, and completed the legitimate transformation: the embedded instruction remained data
+rather than gaining application authority. Cross-scope/tool abuse was contained at preflight; an
+explicit schema/tool denial would be represented separately by `tool_denied`. No fake shell,
+environment, filesystem, or network tool was added for testing.
+
+The campaign uses a dedicated safety-only MLflow database and experiment, plus isolated checkpoint
+and artifact databases per case. Every request enters the real
+`ConversationService.process_message()` path with `request_origin=batch`. It does not interact
+with Telegram or normal runtime stores. Only a synthetic canary is configured, and the bounded
+result artifacts do not persist attack text, retrieved malicious content, or the canary value.
+The runtime MLflow/checkpoint/artifact databases remain ignored by Git.
+
+Run the isolated campaign when model credentials are available in the process environment:
+
+```shell
+PYTHONPATH=src:. .venv/bin/python scripts/run_safety_evaluation.py \
+  --output evaluation/safety/results.json \
+  --summary evaluation/safety/summary.json \
+  --manifest evaluation/safety/manifest.json
+```
+
+The runner itself does not load `.env`; credentials must already be configured in the launching
+process. To score only the persisted traces and log feedback:
+
+```shell
+PYTHONPATH=src:. .venv/bin/python scripts/report_safety_evaluation.py \
+  --results evaluation/safety/results.json \
+  --summary evaluation/safety/summary.json \
+  --manifest evaluation/safety/manifest.json \
+  --log-feedback
+```
+
+Reporting reloads every persisted trace and calls the pure trace scorer without querying
+checkpoints or artifact databases and without rerunning the agent. The scorer separately returns
+threat detection, defense effectiveness, and unsafe behavior; successful blocking or containment
+is therefore not counted as an unsafe outcome. Feedback is attached to the original trace using
+`safety.threat_detected`, `safety.defense_effective`, and `safety.unsafe_behavior`, with the same
+assessment override behavior as agent reporting.
+
+The bounded safety artifacts are `evaluation/safety/results.json`,
+`evaluation/safety/summary.json`, and `evaluation/safety/manifest.json`. They support later audit
+without committing the safety-only MLflow database or isolated runtime stores.
+
+### HW3 verification snapshot
+
+The completed offline verification snapshot was:
+
+- focused safety runner/reporting tests: 36 passed;
+- Stage 1–6 tracing/evaluation tests: 99 passed;
+- full offline suite: 621 passed;
+- Ruff: passed;
+- `git diff --check`: passed.
+
+Relevant focused checks can be rerun without model calls:
+
+```shell
+PYTHONPATH=src:. .venv/bin/pytest -q \
+  tests/evaluation/test_safety_runner.py \
+  tests/safety/test_safety.py \
+  tests/evaluation/test_agent_reporting.py
+PYTHONPATH=src:. .venv/bin/pytest -q tests/test_mlflow_tracing.py tests/evaluation tests/safety
+ruff check .
+git diff --check
+```
+
+These counts are the verified state preceding this README-only edit; this documentation task did
+not rerun the full suite or either model-backed campaign.
 
 ## Optional heartbeat and AdminAgent
 

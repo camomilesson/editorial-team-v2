@@ -25,6 +25,7 @@ htmlcov/
 mlruns/
 evaluation/agent/.runtime/
 evaluation/agent/results.json
+evaluation/safety/.runtime/
 
 # Local runtime databases
 runtime_data/
