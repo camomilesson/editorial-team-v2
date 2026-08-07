@@ -23,16 +23,32 @@ from editorial_team.artifacts import (
     artifact_id_for,
     content_sha256,
 )
+from editorial_team.conversation import ConversationServiceError
+from editorial_team.domain.conversation import ConversationState
+from editorial_team.domain.editorial import (
+    CriticReport,
+    CriticVerdict,
+    WritingBrief,
+    WritingTask,
+    WritingTaskStatus,
+)
 from editorial_team.evaluation.agent_cases import (
     FIXED_NOW,
+    ActiveTaskFixture,
     AgentEvaluationCase,
     load_agent_evaluation_cases,
 )
 from editorial_team.evaluation.agent_harness import (
     AgentInvocation,
     AgentRunExecutor,
+    AgentRunFailure,
     RunIdentity,
     run_agent_evaluation,
+)
+from editorial_team.evaluation.agent_reporting import (
+    CampaignManifest,
+    TraceLocation,
+    write_campaign_manifest,
 )
 from editorial_team.evaluation.generation_judges import StructuredGenerationJudge
 from editorial_team.evaluation.generation_models import GenerationContext
@@ -78,25 +94,36 @@ class RealAgentRunExecutor(AgentRunExecutor):
             clock=lambda: FIXED_NOW,
         )
         try:
-            for setup_message in case.setup.setup_messages:
-                service.process_message(identity.conversation_id, setup_message)
-            active_before = _active_task(service, identity.thread_id)
-            messages = service.process_message(
-                identity.conversation_id,
-                case.input_message,
-                request_origin="batch",
-                eval_case_id=case.case_id,
-                eval_run_number=identity.run_number,
-                eval_agent_temperature=agent_temperature,
-            )
-            active_after = _active_task(service, identity.thread_id)
+            _seed_active_state(service, identity, case.setup.active_task)
+            try:
+                messages, active_before, active_after = _invoke_case(
+                    service,
+                    case,
+                    identity,
+                    agent_temperature=agent_temperature,
+                )
+            except Exception as exc:
+                try:
+                    trace_id = _new_stored_trace(
+                        self._experiment_id, before, case.case_id, identity.run_number
+                    ).info.trace_id
+                except RuntimeError:
+                    trace_id = ""
+                public_error = (
+                    f"ConversationServiceError: {exc}"
+                    if isinstance(exc, ConversationServiceError)
+                    else "Evaluation invocation failed"
+                )
+                raise AgentRunFailure(trace_id, public_error) from None
         finally:
             service.close()
-        trace = _new_stored_trace(self._experiment_id, before, case.case_id)
+        trace = _new_stored_trace(self._experiment_id, before, case.case_id, identity.run_number)
         response = "\n\n".join(message.content for message in messages)
         facts = {
-            "active_task_used": active_before is not None and active_after is not None,
-            "unrelated_active_task_preserved": active_before == active_after,
+            "active_revision_applied": _active_revision_applied(active_before, active_after),
+            "historical_orbit_selected": _historical_orbit_selected(active_after),
+            "ember_not_used_as_source": _ember_not_used_as_source(active_before, active_after),
+            "no_match_safe": active_before == active_after,
         }
         return AgentInvocation(
             trace=trace,
@@ -109,9 +136,17 @@ class RealAgentRunExecutor(AgentRunExecutor):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run the 12-case x 3-run HW3 agent suite")
+    parser = argparse.ArgumentParser(description="Run the HW3 agent evaluation suite")
     parser.add_argument("--output", type=Path, default=Path("evaluation/agent/results.json"))
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        help="Campaign manifest path (defaults beside the raw result JSON)",
+    )
     parser.add_argument("--temperature", type=float, default=0.2)
+    parser.add_argument(
+        "--case", action="append", dest="case_ids", help="Run only this case (repeatable)"
+    )
     args = parser.parse_args(argv)
     suite_id = f"suite-{uuid4().hex}"
     suite_root = Path("evaluation/agent/.runtime") / suite_id
@@ -121,14 +156,35 @@ def main(argv: list[str] | None = None) -> int:
     os.environ["EDITORIAL_MLFLOW_EXPERIMENT"] = f"editorial-agent-eval-{suite_id}"
     initialize_mlflow_tracing()
     experiment = mlflow.set_experiment(os.environ["EDITORIAL_MLFLOW_EXPERIMENT"])
+    manifest_path = args.manifest or args.output.with_name(f"{args.output.stem}.manifest.json")
     executor = RealAgentRunExecutor(suite_root, experiment.experiment_id)
     judge = StructuredGenerationJudge(create_gemini_client_from_env())
+    cases = load_agent_evaluation_cases()
+    if args.case_ids:
+        selected = set(args.case_ids)
+        cases = tuple(case for case in cases if case.case_id in selected)
+        if {case.case_id for case in cases} != selected:
+            parser.error("--case contains an unknown case ID")
     results = run_agent_evaluation(
-        load_agent_evaluation_cases(),
+        cases,
         executor,
         output_path=args.output,
         agent_temperature=args.temperature,
         generation_judge=judge,
+    )
+    location = TraceLocation(
+        f"sqlite:///{tracking_path.resolve()}", experiment.experiment_id, experiment.name
+    )
+    write_campaign_manifest(
+        manifest_path,
+        CampaignManifest(
+            schema_version=1,
+            tracking_uri=location.tracking_uri,
+            experiment_id=location.experiment_id,
+            experiment_name=location.experiment_name,
+            raw_results_path=str(args.output.resolve()),
+            trace_locations={result.trace_id: location for result in results if result.trace_id},
+        ),
     )
     passed = sum(
         result.trajectory_passed
@@ -184,7 +240,9 @@ def _seed_artifacts(
             GenerationContext(chunk.chunk_id, chunk.artifact_id, chunk.content)
             for chunk in golden_chunks
         )
-        generation = GenerationReference(case.case_id, case.outcome.description, contexts)
+        if not isinstance(case.generation_golden_answer, str):
+            raise ValueError("generation-scored case has no factual golden answer")
+        generation = GenerationReference(case.case_id, case.generation_golden_answer, contexts)
     return retrieval, generation
 
 
@@ -197,14 +255,19 @@ def _trace_ids(experiment_id: str) -> set[str]:
     }
 
 
-def _new_stored_trace(experiment_id: str, before: set[str], case_id: str) -> Trace:
+def _new_stored_trace(experiment_id: str, before: set[str], case_id: str, run_number: int) -> Trace:
     traces = mlflow.search_traces(
         locations=[experiment_id], return_type="list", include_spans=True, flush=True
     )
     matches = [
         trace
         for trace in traces
-        if trace.info.trace_id not in before and trace.info.tags.get("eval_case_id") == case_id
+        if trace.info.trace_id not in before
+        and trace.info.tags.get("eval_case_id") == case_id
+        and any(
+            span.parent_id is None and span.attributes.get("evaluation.run_number") == run_number
+            for span in trace.data.spans
+        )
     ]
     if len(matches) != 1:
         raise RuntimeError("evaluation invocation did not produce exactly one stored trace")
@@ -218,6 +281,76 @@ def _active_task(service: Any, thread_id: str) -> object:
     snapshot = runner.get_state({"configurable": {"thread_id": thread_id}})
     conversation = snapshot.values.get("conversation")
     return None if conversation is None else conversation.active_task
+
+
+def _invoke_case(
+    service: Any,
+    case: AgentEvaluationCase,
+    identity: RunIdentity,
+    *,
+    agent_temperature: float,
+) -> tuple[tuple[Any, ...], object, object]:
+    active_before = _active_task(service, identity.thread_id)
+    messages = service.process_message(
+        identity.conversation_id,
+        case.input_message,
+        request_origin="batch",
+        eval_case_id=case.case_id,
+        eval_run_number=identity.run_number,
+        eval_agent_temperature=agent_temperature,
+    )
+    active_after = _active_task(service, identity.thread_id)
+    return messages, active_before, active_after
+
+
+def _seed_active_state(
+    service: Any, identity: RunIdentity, fixture: ActiveTaskFixture | None
+) -> None:
+    if fixture is None:
+        return
+    report = CriticReport(CriticVerdict.PASS, "Deterministic evaluation fixture")
+    task = WritingTask(
+        fixture.task_id,
+        identity.conversation_id,
+        WritingBrief(fixture.original_request),
+        WritingTaskStatus.REVIEWED,
+        FIXED_NOW,
+        FIXED_NOW,
+        fixture.working_draft,
+        report,
+    )
+    service._graph_runner.update_state(
+        {"configurable": {"thread_id": identity.thread_id}},
+        {"conversation": ConversationState(identity.conversation_id, active_task=task)},
+    )
+
+
+def _active_revision_applied(before: object, after: object) -> bool:
+    return (
+        isinstance(before, WritingTask)
+        and isinstance(after, WritingTask)
+        and before.brief.original_request == after.brief.original_request
+        and before.working_draft != after.working_draft
+        and len(after.brief.instructions) > len(before.brief.instructions)
+    )
+
+
+def _historical_orbit_selected(after: object) -> bool:
+    return (
+        isinstance(after, WritingTask)
+        and after.brief.original_request == "Write the Orbit launch draft"
+        and after.working_draft is not None
+    )
+
+
+def _ember_not_used_as_source(before: object, after: object) -> bool:
+    return (
+        isinstance(before, WritingTask)
+        and isinstance(after, WritingTask)
+        and "Ember" in before.brief.original_request
+        and after.brief.original_request != before.brief.original_request
+        and after.working_draft != before.working_draft
+    )
 
 
 if __name__ == "__main__":

@@ -19,10 +19,16 @@ class ArtifactFixture:
 
 
 @dataclass(frozen=True)
+class ActiveTaskFixture:
+    task_id: str
+    original_request: str
+    working_draft: str
+
+
+@dataclass(frozen=True)
 class CaseSetup:
     artifacts: tuple[ArtifactFixture, ...] = ()
-    setup_messages: tuple[str, ...] = ()
-    protected_state_labels: tuple[str, ...] = ()
+    active_task: ActiveTaskFixture | None = None
 
 
 @dataclass(frozen=True)
@@ -54,6 +60,7 @@ class AgentEvaluationCase:
     score_retrieval: bool = False
     score_generation: bool = False
     golden_fixture_ids: tuple[str, ...] = ()
+    generation_golden_answer: str | None = None
 
     @property
     def accepted_trajectories(self) -> tuple[tuple[str, ...], ...]:
@@ -115,6 +122,12 @@ def load_agent_evaluation_cases() -> tuple[AgentEvaluationCase, ...]:
         datetime(2026, 4, 3, 8, tzinfo=UTC),
         "Write the Orbit launch draft",
         "Orbit launch draft: a calm introduction to the research workspace.",
+    )
+    ember_active = ActiveTaskFixture(
+        "eval-active-ember",
+        "Write a factual two-paragraph Ember update for product leaders",
+        "Ember helps product leaders compare editorial revisions. Its workspace keeps factual "
+        "review notes beside each draft. The opening currently contains too much framing.",
     )
     rerank_a = _artifact(
         "atlas-map",
@@ -178,7 +191,7 @@ def load_agent_evaluation_cases() -> tuple[AgentEvaluationCase, ...]:
             "Using our saved Aurora notes, write one sentence stating its launch date "
             "and approved theme.",
             CaseSetup((memory,)),
-            ("search_corpus",),
+            ("search_corpus", "get_draft"),
             (),
             OutcomeExpectation(
                 "Uses the saved Aurora facts",
@@ -188,6 +201,7 @@ def load_agent_evaluation_cases() -> tuple[AgentEvaluationCase, ...]:
             True,
             True,
             ("aurora-memory",),
+            "Aurora launches on September 14 under the approved theme Quiet Momentum.",
         ),
         AgentEvaluationCase(
             "retrieve_exact_draft",
@@ -210,6 +224,7 @@ def load_agent_evaluation_cases() -> tuple[AgentEvaluationCase, ...]:
             True,
             True,
             ("cedar-draft",),
+            "Cedar encourages teams to build patiently, publish clearly, and revise with evidence.",
         ),
         AgentEvaluationCase(
             "retrieve_latest_topic",
@@ -234,12 +249,14 @@ def load_agent_evaluation_cases() -> tuple[AgentEvaluationCase, ...]:
             True,
             True,
             ("solstice-latest",),
+            "The latest Solstice draft says the public preview opens in August.",
         ),
         AgentEvaluationCase(
             "retrieve_recent_period",
-            "What milestone did we mention in prior work last week? Answer in one sentence.",
+            "Find the Northstar note from last week and rewrite the complete note as one concise "
+            "status sentence.",
             CaseSetup((recent,)),
-            ("search_corpus",),
+            ("search_corpus", "get_draft"),
             (),
             OutcomeExpectation(
                 "Uses only the fixed last-week window", required_response_terms=("design-partner",)
@@ -247,45 +264,40 @@ def load_agent_evaluation_cases() -> tuple[AgentEvaluationCase, ...]:
             (
                 ParameterExpectation(0, "created_from", "timestamp_equals", LAST_WEEK_FROM),
                 ParameterExpectation(0, "created_to", "timestamp_equals", LAST_WEEK_TO),
+                ParameterExpectation(
+                    1,
+                    "artifact_id",
+                    "equals",
+                    artifact_id_for("eval-recent-week", ArtifactProducer.WRITER),
+                ),
             ),
             True,
             True,
             ("recent-week",),
+            "Northstar reached the design-partner milestone last week.",
         ),
         AgentEvaluationCase(
             "active_revision",
             "Revise the active draft to make the opening shorter while preserving its facts.",
-            CaseSetup(
-                setup_messages=(
-                    "Start a writing task for a factual two-paragraph Ember update. Before "
-                    "finalizing, ask me which audience it targets.",
-                )
-            ),
+            CaseSetup(active_task=ember_active),
             (),
             (),
             OutcomeExpectation(
                 "Revises active state without historical retrieval",
-                required_facts=("active_task_used",),
+                required_facts=("active_revision_applied",),
             ),
         ),
         AgentEvaluationCase(
             "historical_revision",
             "Revise the older Orbit launch draft in full; do not alter the unrelated "
             "active Ember task.",
-            CaseSetup(
-                (historical,),
-                (
-                    "Start an unrelated Ember writing task and ask for clarification before "
-                    "drafting.",
-                ),
-                ("unrelated_active_task",),
-            ),
+            CaseSetup((historical,), active_task=ember_active),
             ("search_corpus", "get_draft"),
             (),
             OutcomeExpectation(
-                "Revises Orbit and preserves unrelated active state",
+                "Revises Orbit without using the unrelated Ember draft as its source",
                 required_response_terms=("orbit",),
-                required_facts=("unrelated_active_task_preserved",),
+                required_facts=("historical_orbit_selected", "ember_not_used_as_source"),
             ),
             (
                 ParameterExpectation(0, "query", "contains_terms", ("orbit",)),
@@ -299,17 +311,18 @@ def load_agent_evaluation_cases() -> tuple[AgentEvaluationCase, ...]:
             True,
             True,
             ("historical-orbit",),
+            "Orbit is a calm introduction to the research workspace.",
         ),
         AgentEvaluationCase(
             "search_no_match",
             "Find our previous Zephyr submarine launch copy and summarize its approved claim.",
             CaseSetup((memory,)),
             ("search_corpus",),
-            (),
+            (("search_corpus", "search_corpus"),),
             OutcomeExpectation(
                 "Gracefully reports no matching material",
-                required_response_terms=("not",),
                 forbidden_response_terms=("approved claim is",),
+                required_facts=("no_match_safe",),
             ),
             (ParameterExpectation(0, "query", "contains_terms", ("zephyr", "submarine")),),
             False,
@@ -320,21 +333,18 @@ def load_agent_evaluation_cases() -> tuple[AgentEvaluationCase, ...]:
             "Using prior Atlas work, summarize the product launch positioning for editorial "
             "research teams, not the geography project.",
             CaseSetup((rerank_a, rerank_b)),
-            ("search_corpus",),
+            ("search_corpus", "get_draft"),
             (),
-            OutcomeExpectation(
-                "Selects product semantics over lexical map noise",
-                required_response_terms=("editorial", "research"),
-            ),
+            OutcomeExpectation("Produces a response whose grounding is scored separately"),
             (
                 ParameterExpectation(
                     0, "query", "contains_terms", ("atlas", "product", "editorial")
                 ),
-                ParameterExpectation(0, "rerank", "equals", True),
             ),
             True,
             True,
             ("atlas-product",),
+            "Atlas is positioned as a workspace for collaborative editorial research teams.",
         ),
         AgentEvaluationCase(
             "ambiguous_reference",

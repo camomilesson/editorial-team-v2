@@ -57,6 +57,15 @@ class AgentRunExecutor(Protocol):
     ) -> AgentInvocation: ...
 
 
+class AgentRunFailure(RuntimeError):
+    """Sanitized failed invocation with its persisted trace identity when available."""
+
+    def __init__(self, trace_id: str, public_error: str) -> None:
+        super().__init__(public_error)
+        self.trace_id = trace_id
+        self.public_error = public_error
+
+
 @dataclass(frozen=True)
 class ParameterComparison:
     call_index: int
@@ -92,14 +101,19 @@ def run_identities(
     if runs_per_case != RUNS_PER_CASE:
         raise ValueError("HW3 agent evaluation requires exactly three runs per case")
     return tuple(
-        RunIdentity(
-            case.case_id,
-            run_number,
-            f"eval:{case.case_id}:{run_number}",
-            f"editorial:v1:eval:{case.case_id}:{run_number}",
-        )
+        _run_identity(case.case_id, run_number)
         for case in cases
         for run_number in range(1, RUNS_PER_CASE + 1)
+    )
+
+
+def _run_identity(case_id: str, run_number: int) -> RunIdentity:
+    conversation_id = f"eval-{case_id.replace('_', '-')}-r{run_number}"
+    return RunIdentity(
+        case_id,
+        run_number,
+        conversation_id,
+        f"editorial:v1:{conversation_id}",
     )
 
 
@@ -146,6 +160,12 @@ def run_agent_evaluation(
                 error=None,
             )
         except Exception as exc:
+            trace_id = exc.trace_id if isinstance(exc, AgentRunFailure) else ""
+            error = (
+                exc.public_error
+                if isinstance(exc, AgentRunFailure)
+                else f"{type(exc).__name__}: {exc}"
+            )
             result = AgentRunResult(
                 case_id=case.case_id,
                 run_number=identity.run_number,
@@ -153,7 +173,7 @@ def run_agent_evaluation(
                 thread_id=identity.thread_id,
                 request_origin=identity.request_origin,
                 agent_temperature=agent_temperature,
-                trace_id="",
+                trace_id=trace_id,
                 tool_trajectory=(),
                 accepted_trajectories=case.accepted_trajectories,
                 trajectory_passed=False,
@@ -162,7 +182,7 @@ def run_agent_evaluation(
                 goal_completion_passed=False,
                 retrieval_scores=None,
                 generation_scores=None,
-                error=f"{type(exc).__name__}: {exc}",
+                error=error,
             )
         results.append(result)
         if output_path is not None:

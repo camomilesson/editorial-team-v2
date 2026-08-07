@@ -1,0 +1,333 @@
+from __future__ import annotations
+
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from mlflow.entities import SpanType
+
+import editorial_team.evaluation.agent_reporting as reporting
+from editorial_team.evaluation.agent_cases import load_agent_evaluation_cases
+from editorial_team.evaluation.agent_harness import (
+    AgentRunResult,
+    ParameterComparison,
+    write_results,
+)
+from editorial_team.evaluation.agent_reporting import (
+    GENERATION_FEEDBACK_NAMES,
+    PART1_FEEDBACK_NAMES,
+    RETRIEVAL_FEEDBACK_NAMES,
+    CampaignManifest,
+    TraceLocation,
+    aggregate_campaign,
+    load_run_results,
+    log_campaign_feedback,
+    rescore_stored_traces,
+)
+from editorial_team.mlflow_tracing import (
+    ATTR_CANDIDATE_ANSWER,
+    ATTR_EVAL_CASE_ID,
+    ATTR_REQUEST_ORIGIN,
+    ATTR_RETRIEVAL_CONTEXTS,
+    ATTR_RETRIEVAL_FINAL_RESULTS,
+    ATTR_RETRIEVAL_REQUEST,
+)
+
+
+def _result(
+    case_id: str,
+    run_number: int,
+    *,
+    trajectory: bool = True,
+    parameters: bool = True,
+    goal: bool = True,
+    comparisons: tuple[ParameterComparison, ...] = (),
+    retrieval: dict[str, float] | None = None,
+    generation: dict[str, float] | None = None,
+    error: str | None = None,
+) -> AgentRunResult:
+    return AgentRunResult(
+        case_id=case_id,
+        run_number=run_number,
+        conversation_id=f"eval-{case_id}-r{run_number}",
+        thread_id=f"editorial:v1:eval-{case_id}-r{run_number}",
+        request_origin="batch",
+        agent_temperature=0.2,
+        trace_id=f"tr-{case_id}-{run_number}",
+        tool_trajectory=("search_corpus",) if trajectory else (),
+        accepted_trajectories=(("search_corpus",),),
+        trajectory_passed=trajectory,
+        parameter_comparisons=comparisons,
+        parameters_passed=parameters,
+        goal_completion_passed=goal,
+        retrieval_scores=retrieval,
+        generation_scores=generation,
+        error=error,
+    )
+
+
+def _three(case_id: str, passed: tuple[bool, bool, bool]) -> tuple[AgentRunResult, ...]:
+    return tuple(_result(case_id, index, parameters=value) for index, value in enumerate(passed, 1))
+
+
+@pytest.mark.parametrize(
+    ("passed", "pattern", "rate", "pass_at_3", "pass_power_3"),
+    [
+        ((True, True, True), "3/3", 1.0, 1, 1),
+        ((True, True, False), "2/3", 2 / 3, 1, 0),
+        ((False, False, False), "0/3", 0.0, 0, 0),
+    ],
+)
+def test_three_run_reliability_formulas(
+    passed: tuple[bool, bool, bool],
+    pattern: str,
+    rate: float,
+    pass_at_3: int,
+    pass_power_3: int,
+) -> None:
+    case = aggregate_campaign(_three("case", passed)).cases[0]
+
+    assert case.pattern == pattern
+    assert case.success_rate == rate
+    assert case.pass_at_3 == pass_at_3
+    assert case.pass_power_3 == pass_power_3
+
+
+def test_final_reliability_requires_exactly_runs_one_two_and_three() -> None:
+    with pytest.raises(ValueError, match="exactly runs 1, 2, and 3"):
+        aggregate_campaign(_three("case", (True, True, True))[:2])
+    duplicate = (_result("case", 1), _result("case", 2), _result("case", 2))
+    with pytest.raises(ValueError, match="exactly runs 1, 2, and 3"):
+        aggregate_campaign(duplicate)
+
+
+def test_write_with_memory_two_of_three_emerges_from_recorded_parameters() -> None:
+    observed = (False, False, True)
+    results = tuple(
+        _result(
+            "write_with_memory",
+            run_number,
+            parameters=prefer_recent is False,
+            comparisons=(
+                ParameterComparison(
+                    0, "prefer_recent", prefer_recent is False, False, prefer_recent
+                ),
+            ),
+        )
+        for run_number, prefer_recent in enumerate(observed, 1)
+    )
+
+    summary = aggregate_campaign(results)
+
+    assert summary.cases[0].pattern == "2/3"
+    assert [run.overall_passed for run in summary.runs] == [True, True, False]
+
+
+def test_tool_parameter_and_goal_metrics_are_independent() -> None:
+    results = (
+        _result("case", 1, trajectory=True, parameters=False, goal=True),
+        _result("case", 2, trajectory=False, parameters=True, goal=True),
+        _result("case", 3, trajectory=True, parameters=True, goal=False),
+    )
+
+    suite = aggregate_campaign(results).suite
+
+    assert suite.tool_selection_accuracy == 2 / 3
+    assert suite.run_level_parameter_accuracy == 2 / 3
+    assert suite.goal_completion_rate == 2 / 3
+    assert suite.overall_successful_runs == 0
+
+
+def test_no_tool_runs_do_not_enter_field_denominator() -> None:
+    comparisons = (
+        ParameterComparison(0, "query", True, "x", "x"),
+        ParameterComparison(0, "top_k", False, 5, 3),
+    )
+    results = (
+        _result("with-tools", 1, parameters=False, comparisons=comparisons),
+        _result("with-tools", 2, parameters=False, comparisons=comparisons),
+        _result("with-tools", 3, parameters=False, comparisons=comparisons),
+        _result("no-tools", 1),
+        _result("no-tools", 2),
+        _result("no-tools", 3),
+    )
+
+    suite = aggregate_campaign(results).suite
+
+    assert suite.field_level_parameter_accuracy == 0.5
+    assert suite.run_level_parameter_accuracy == 0.5
+
+
+def test_feedback_logs_part1_and_unchanged_hw2_values_to_origin_trace() -> None:
+    result = _result(
+        "case",
+        1,
+        retrieval={"mrr_at_5": 0.75, "precision_at_5": 0.4, "recall_at_5": 1.0},
+        generation={
+            "faithfulness": 0.8,
+            "answer_relevance": 0.9,
+            "context_precision": 0.7,
+            "context_recall": 0.6,
+        },
+    )
+    logged: list[dict[str, object]] = []
+    manifest = CampaignManifest(1, "sqlite:///:memory:", "exp-1", "campaign", "results.json")
+
+    count = log_campaign_feedback(
+        (result,),
+        manifest,
+        get_trace=lambda trace_id, **_kwargs: SimpleNamespace(
+            info=SimpleNamespace(trace_id=trace_id, experiment_id="exp-1")
+        ),
+        log_feedback=lambda **kwargs: logged.append(kwargs),
+    )
+
+    assert count == 11
+    assert {item["trace_id"] for item in logged} == {result.trace_id}
+    values = {str(item["name"]): item["value"] for item in logged}
+    assert values == {
+        PART1_FEEDBACK_NAMES["tool_selection"]: 1.0,
+        PART1_FEEDBACK_NAMES["tool_parameters"]: 1.0,
+        PART1_FEEDBACK_NAMES["goal_completion"]: 1.0,
+        PART1_FEEDBACK_NAMES["overall_pass"]: 1.0,
+        RETRIEVAL_FEEDBACK_NAMES["mrr_at_5"]: 0.75,
+        RETRIEVAL_FEEDBACK_NAMES["precision_at_5"]: 0.4,
+        RETRIEVAL_FEEDBACK_NAMES["recall_at_5"]: 1.0,
+        GENERATION_FEEDBACK_NAMES["faithfulness"]: 0.8,
+        GENERATION_FEEDBACK_NAMES["answer_relevance"]: 0.9,
+        GENERATION_FEEDBACK_NAMES["context_precision"]: 0.7,
+        GENERATION_FEEDBACK_NAMES["context_recall"]: 0.6,
+    }
+    assert "secret-canary" not in repr(logged)
+
+
+def test_feedback_works_after_result_serialization_and_reload(tmp_path: Path) -> None:
+    path = tmp_path / "results.json"
+    write_results(path, (_result("case", 1),))
+    reloaded = load_run_results(path)
+    logged: list[dict[str, object]] = []
+
+    log_campaign_feedback(
+        reloaded,
+        CampaignManifest(1, "sqlite:///:memory:", "exp-1", "campaign", str(path)),
+        get_trace=lambda trace_id, **_kwargs: SimpleNamespace(
+            info=SimpleNamespace(trace_id=trace_id, experiment_id="exp-1")
+        ),
+        log_feedback=lambda **kwargs: logged.append(kwargs),
+    )
+
+    assert len(logged) == 4
+    assert {item["trace_id"] for item in logged} == {"tr-case-1"}
+
+
+def test_wrong_tracking_store_or_experiment_fails_clearly() -> None:
+    manifest = CampaignManifest(1, "sqlite:///:memory:", "exp-1", "campaign", "results.json")
+    with pytest.raises(RuntimeError, match="missing from campaign tracking store"):
+        log_campaign_feedback((_result("case", 1),), manifest, get_trace=lambda *_a, **_k: None)
+    with pytest.raises(RuntimeError, match="different experiment"):
+        log_campaign_feedback(
+            (_result("case", 1),),
+            manifest,
+            get_trace=lambda *_a, **_k: SimpleNamespace(
+                info=SimpleNamespace(experiment_id="wrong")
+            ),
+        )
+
+
+def test_feedback_uses_the_tracking_location_declared_for_each_trace() -> None:
+    first = _result("case", 1)
+    second = _result("case", 2)
+    locations = {
+        first.trace_id: TraceLocation("sqlite:///:memory:", "exp-1", "one"),
+        second.trace_id: TraceLocation("sqlite:///second.db", "exp-2", "two"),
+    }
+    observed: list[tuple[str, str]] = []
+
+    def get_trace(trace_id: str, **_kwargs: object) -> object:
+        location = locations[trace_id]
+        observed.append((trace_id, reporting.mlflow.get_tracking_uri()))
+        return SimpleNamespace(info=SimpleNamespace(experiment_id=location.experiment_id))
+
+    log_campaign_feedback(
+        (first, second),
+        CampaignManifest(
+            1,
+            "sqlite:///:memory:",
+            "exp-1",
+            "campaign",
+            "results.json",
+            trace_locations=locations,
+        ),
+        get_trace=get_trace,
+        log_feedback=lambda **_kwargs: None,
+    )
+
+    assert observed == [
+        (first.trace_id, "sqlite:///:memory:"),
+        (second.trace_id, "sqlite:///second.db"),
+    ]
+
+
+def test_stored_trace_rescoring_uses_current_references_without_agent_rerun(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = next(
+        item for item in load_agent_evaluation_cases() if item.case_id == "write_with_memory"
+    )
+    retrieval_reference, generation_reference = reporting._case_references(case)
+    context = generation_reference.golden_contexts[0]
+    root = SimpleNamespace(
+        parent_id=None,
+        span_type=SpanType.AGENT,
+        attributes={
+            ATTR_EVAL_CASE_ID: case.case_id,
+            ATTR_REQUEST_ORIGIN: "batch",
+            ATTR_CANDIDATE_ANSWER: generation_reference.golden_answer,
+        },
+    )
+    retriever = SimpleNamespace(
+        parent_id="root",
+        span_type=SpanType.RETRIEVER,
+        start_time_ns=1,
+        span_id="retriever",
+        attributes={
+            ATTR_RETRIEVAL_REQUEST: {"query": "Aurora notes"},
+            ATTR_RETRIEVAL_FINAL_RESULTS: [{"chunk_id": context.chunk_id}],
+            ATTR_RETRIEVAL_CONTEXTS: [
+                {
+                    "chunk_id": context.chunk_id,
+                    "artifact_id": context.artifact_id,
+                    "content": context.content,
+                }
+            ],
+        },
+    )
+    trace = SimpleNamespace(
+        info=SimpleNamespace(experiment_id="exp-1"),
+        data=SimpleNamespace(spans=[root, retriever]),
+    )
+    monkeypatch.setattr(reporting.mlflow, "get_trace", lambda *_args, **_kwargs: trace)
+
+    class Judge:
+        def judge(self, *_args: object, **_kwargs: object) -> object:
+            return SimpleNamespace(score=0.625)
+
+    rescored = rescore_stored_traces(
+        (_result(case.case_id, 1),),
+        (case,),
+        CampaignManifest(1, "sqlite:///:memory:", "exp-1", "campaign", "results.json"),
+        generation_judge=Judge(),
+    )
+
+    assert retrieval_reference.golden_chunk_ids == frozenset({context.chunk_id})
+    assert rescored[0].retrieval_scores == {
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0,
+        "mrr_at_5": 1.0,
+    }
+    assert rescored[0].generation_scores == {
+        "faithfulness": 0.625,
+        "answer_relevance": 0.625,
+        "context_precision": 0.625,
+        "context_recall": 0.625,
+    }
