@@ -760,8 +760,11 @@ observed sequence with the declared alternatives. Parameter accuracy is computed
 across individual field assertions. Goal completion remains separate from both tool metrics, and
 overall run success additionally requires that no fatal execution error occurred.
 
-The final derived campaign summary is `evaluation/agent/final-summary.json`; its raw run records
-and tracking-store identity are in `evaluation/agent/final-results.json` and
+`evaluation/agent/final-results.json` preserves the original campaign run records captured at
+execution time. Some Part 1 component values were subsequently corrected by deterministic
+rescoring of the persisted MLflow traces, without rerunning the agent. The authoritative reported
+Part 1 metrics are those rescored values in `evaluation/agent/final-summary.json` and the current
+valid MLflow feedback assessments. The tracking-store identity is recorded in
 `evaluation/agent/final-results.manifest.json`.
 
 | Part 1 metric | Successful / evaluated | Rate |
