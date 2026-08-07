@@ -273,6 +273,7 @@ class TelegramAdapter:
                     message_thread_id,
                 ),
                 text,
+                request_origin="ui",
             )
         except Exception as exc:
             trace_event(

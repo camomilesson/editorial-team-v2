@@ -11,6 +11,11 @@ from editorial_team.agents.prompts import coordinator_prompt
 from editorial_team.agents.schemas import COORDINATOR_STRUCTURED_OUTPUT
 from editorial_team.domain.conversation import ConversationState, Message
 from editorial_team.domain.routing import CoordinatorDecision
+from editorial_team.mlflow_tracing import (
+    langchain_llm_span,
+    mark_llm_failure,
+    record_langchain_usage,
+)
 from editorial_team.models import ModelClient
 
 
@@ -51,10 +56,13 @@ class ToolCallingCoordinator:
     ) -> AIMessage:
         """Return one tool-call or final-decision AI message."""
 
-        try:
-            response = self._chat_model.bind_tools(list(tools)).invoke(list(messages))
-        except Exception:
-            raise RuntimeError("Coordinator model call failed") from None
+        with langchain_llm_span(model=self._chat_model) as span:
+            try:
+                response = self._chat_model.bind_tools(list(tools)).invoke(list(messages))
+                record_langchain_usage(span, response)
+            except Exception:
+                mark_llm_failure(span)
+                raise RuntimeError("Coordinator model call failed") from None
         if not isinstance(response, AIMessage):
             raise RuntimeError("Coordinator returned invalid output")
         return response

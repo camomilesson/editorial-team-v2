@@ -49,6 +49,11 @@ from editorial_team.domain.routing import CoordinatorDecision, CoordinatorRoute
 from editorial_team.errors import ServiceError
 from editorial_team.graphs.editorial import EditorialGraphError, build_editorial_subgraph
 from editorial_team.graphs.state import EditorialGraphStateV1, validate_graph_state_version
+from editorial_team.mlflow_tracing import (
+    record_tool_exception,
+    record_tool_result,
+    tool_execution_span,
+)
 from editorial_team.tracing import (
     current_trace_stage,
     error_category,
@@ -256,25 +261,41 @@ class _ConversationNodes:
                         "message": "The tool is unavailable",
                     },
                 }
-            elif name == "get_draft" and not search_completed:
-                output = {
-                    "ok": False,
-                    "error": {
-                        "type": "search_required",
-                        "message": "Search the corpus before selecting a draft",
-                    },
-                }
             else:
+                raw_arguments = call.get("args", {})
                 try:
-                    output = tool.invoke(call.get("args", {}))
+                    traced_arguments = tool.args_schema.model_validate(raw_arguments).model_dump()
                 except Exception:
-                    output = {
-                        "ok": False,
-                        "error": {
-                            "type": "invalid_tool_arguments",
-                            "message": "The tool arguments are invalid",
-                        },
-                    }
+                    traced_arguments = raw_arguments
+                with tool_execution_span(
+                    name=str(name),
+                    arguments=traced_arguments,
+                    call_id=call.get("id"),
+                ) as tool_span:
+                    execution_failed = False
+                    if name == "get_draft" and not search_completed:
+                        output = {
+                            "ok": False,
+                            "error": {
+                                "type": "search_required",
+                                "message": "Search the corpus before selecting a draft",
+                            },
+                        }
+                    else:
+                        try:
+                            output = tool.invoke(raw_arguments)
+                        except Exception:
+                            execution_failed = True
+                            record_tool_exception(tool_span)
+                            output = {
+                                "ok": False,
+                                "error": {
+                                    "type": "invalid_tool_arguments",
+                                    "message": "The tool arguments are invalid",
+                                },
+                            }
+                    if not execution_failed:
+                        record_tool_result(tool_span, output)
             if (
                 name == "search_corpus"
                 and isinstance(output, dict)

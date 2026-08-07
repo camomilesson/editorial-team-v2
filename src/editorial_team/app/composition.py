@@ -52,6 +52,7 @@ from editorial_team.gemini import (
 from editorial_team.graphs import build_parent_graph, create_sqlite_checkpointer
 from editorial_team.interfaces.admin import TelegramMaintainerNotifier
 from editorial_team.interfaces.telegram import TelegramAdapter, build_telegram_application
+from editorial_team.mlflow_tracing import initialize_mlflow_tracing
 from editorial_team.models import ModelClient
 from editorial_team.operations import (
     AdminPolicy,
@@ -193,6 +194,8 @@ def build_conversation_service(
 
 def build_live_application_from_env() -> LiveApplication:
     """Validate process configuration and compose the polling application."""
+
+    initialize_mlflow_tracing()
 
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:

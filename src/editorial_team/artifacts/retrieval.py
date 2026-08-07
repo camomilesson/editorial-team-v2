@@ -22,6 +22,11 @@ from editorial_team.artifacts.retrieval_types import (
     SearchResult,
 )
 from editorial_team.errors import ServiceError
+from editorial_team.mlflow_tracing import (
+    record_retrieval_failure,
+    record_retrieval_results,
+    retrieval_span,
+)
 
 DEFAULT_DENSE_DEPTH = 30
 DEFAULT_BM25_DEPTH = 30
@@ -168,28 +173,35 @@ class HybridRetriever:
 
         if not isinstance(request, SearchRequest):
             raise ValueError("request must be a SearchRequest")
-        chunks = self._store.list_searchable_chunks(
-            conversation_id=request.conversation_id,
-            created_from=request.created_from,
-            created_to=request.created_to,
-        )
-        if not chunks:
-            return RetrievalStages((), (), (), ())
-        try:
-            dense = self._dense.rank(request.query, chunks)
-            bm25 = self._bm25.rank(request.query, chunks)
-            fused = reciprocal_rank_fusion(
-                dense,
-                bm25,
-                rrf_k=self.rrf_k,
-                depth=self.fused_depth,
-            )
-            results = self._finalize(request, fused)
-        except RetrievalError:
-            raise
-        except Exception:
-            raise RetrievalError("Hybrid retrieval failed") from None
-        return RetrievalStages(dense, bm25, fused, results)
+        with retrieval_span(request) as span:
+            try:
+                chunks = self._store.list_searchable_chunks(
+                    conversation_id=request.conversation_id,
+                    created_from=request.created_from,
+                    created_to=request.created_to,
+                )
+                if not chunks:
+                    stages = RetrievalStages((), (), (), ())
+                    record_retrieval_results(span, stages)
+                    return stages
+                dense = self._dense.rank(request.query, chunks)
+                bm25 = self._bm25.rank(request.query, chunks)
+                fused = reciprocal_rank_fusion(
+                    dense,
+                    bm25,
+                    rrf_k=self.rrf_k,
+                    depth=self.fused_depth,
+                )
+                results = self._finalize(request, fused)
+            except RetrievalError:
+                record_retrieval_failure(span)
+                raise
+            except Exception:
+                record_retrieval_failure(span)
+                raise RetrievalError("Hybrid retrieval failed") from None
+            stages = RetrievalStages(dense, bm25, fused, results)
+            record_retrieval_results(span, stages)
+            return stages
 
     def get_draft(self, *, artifact_id: str, conversation_id: str) -> RetrievedDraft | None:
         """Return complete content only inside the supplied conversation scope."""

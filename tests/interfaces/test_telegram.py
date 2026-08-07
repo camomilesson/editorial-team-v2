@@ -86,9 +86,13 @@ class RecordingService:
     def __init__(self, output: tuple[Message, ...] = ()) -> None:
         self.output = output
         self.calls: list[tuple[str, str]] = []
+        self.request_origins: list[str] = []
 
-    def process_message(self, conversation_id: str, text: str) -> tuple[Message, ...]:
+    def process_message(
+        self, conversation_id: str, text: str, *, request_origin: str = "api"
+    ) -> tuple[Message, ...]:
         self.calls.append((conversation_id, text))
+        self.request_origins.append(request_origin)
         return self.output
 
 
@@ -174,6 +178,7 @@ def test_three_agent_messages_are_staged_in_order() -> None:
     asyncio.run(adapter.handle_text(update, ctx))  # type: ignore[arg-type]
 
     assert service.calls == [("telegram-chat-123", "Exact user text")]
+    assert service.request_origins == ["ui"]
     assert [item["text"] for item in ctx.bot.sent] == [
         "Writer output",
         "Critic evaluation",
@@ -385,7 +390,10 @@ def test_service_failure_sends_and_logs_only_sanitized_details(
     caplog.set_level("INFO", logger="editorial_team.live_trace")
 
     class FailingService:
-        def process_message(self, conversation_id: str, text: str) -> tuple[Message, ...]:
+        def process_message(
+            self, conversation_id: str, text: str, *, request_origin: str = "api"
+        ) -> tuple[Message, ...]:
+            del conversation_id, text, request_origin
             raise RuntimeError("provider secret and full draft diagnostics")
 
     adapter = TelegramAdapter(  # type: ignore[arg-type]
@@ -467,7 +475,10 @@ def test_two_updates_are_serialized_in_processing_order() -> None:
             self.active = 0
             self.maximum_active = 0
 
-        def process_message(self, conversation_id: str, text: str) -> tuple[Message, ...]:
+        def process_message(
+            self, conversation_id: str, text: str, *, request_origin: str = "api"
+        ) -> tuple[Message, ...]:
+            del conversation_id, request_origin
             self.active += 1
             self.maximum_active = max(self.maximum_active, self.active)
             self.calls.append(text)

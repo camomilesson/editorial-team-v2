@@ -9,6 +9,11 @@ from typing import Any
 from google import genai
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+from editorial_team.mlflow_tracing import (
+    gemini_llm_span,
+    mark_llm_failure,
+    record_gemini_usage,
+)
 from editorial_team.models import (
     ModelClientError,
     ModelRequest,
@@ -63,24 +68,35 @@ class GeminiModelClient:
                 "schema_": request.structured_output.schema,
             }
 
-        try:
-            interaction = self._client.interactions.create(**kwargs)
-            tool_calls = tuple(
-                ToolCall(
-                    call_id=step.id,
-                    name=step.name,
-                    arguments=dict(step.arguments or {}),
+        with gemini_llm_span(model=self.model) as span:
+            try:
+                interaction = self._client.interactions.create(**kwargs)
+                tool_calls = tuple(
+                    ToolCall(
+                        call_id=step.id,
+                        name=step.name,
+                        arguments=dict(step.arguments or {}),
+                    )
+                    for step in interaction.steps
+                    if step.type == "function_call"
                 )
-                for step in interaction.steps
-                if step.type == "function_call"
-            )
-            return ModelResponse(
-                text=interaction.output_text or "",
-                tool_calls=tool_calls,
-                continuation_token=interaction.id,
-            )
-        except Exception as exc:
-            raise ModelClientError("Gemini model call failed") from exc
+                response = ModelResponse(
+                    text=interaction.output_text or "",
+                    tool_calls=tool_calls,
+                    continuation_token=interaction.id,
+                )
+                record_gemini_usage(span, interaction)
+                if span is not None:
+                    span.set_attributes(
+                        {
+                            "response.text_present": bool(response.text),
+                            "response.tool_call_count": len(response.tool_calls),
+                        }
+                    )
+                return response
+            except Exception:
+                mark_llm_failure(span)
+                raise ModelClientError("Gemini model call failed") from None
 
     @staticmethod
     def _convert_input(

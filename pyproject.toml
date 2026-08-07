@@ -16,6 +16,7 @@ dependencies = [
     "langgraph-checkpoint-sqlite>=3.1,<4.0",
     "langchain-core>=1.2,<2.0",
     "langchain-google-genai>=4.0,<5.0",
+    "mlflow==3.15.1",
     "numpy>=1.26,<3.0",
     "python-telegram-bot==22.8",
     "sentence-transformers>=3.0,<6.0",
