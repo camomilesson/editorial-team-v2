@@ -26,6 +26,8 @@ REQUEST_ORIGINS = frozenset({"ui", "api", "batch"})
 # Stable stored-trace schema shared by instrumentation and pure evaluation adapters.
 ATTR_REQUEST_ORIGIN = "request_origin"
 ATTR_EVAL_CASE_ID = "eval_case_id"
+ATTR_EVAL_RUN_NUMBER = "evaluation.run_number"
+ATTR_EVAL_AGENT_TEMPERATURE = "evaluation.agent_temperature"
 ATTR_CANDIDATE_ANSWER = "evaluation.candidate_answer"
 ATTR_TOOL_NAME = "tool.name"
 ATTR_TOOL_ARGUMENTS = "tool.arguments"
@@ -81,7 +83,11 @@ def validate_request_origin(value: object) -> RequestOrigin:
 
 @contextmanager
 def agent_invocation_span(
-    *, request_origin: RequestOrigin, eval_case_id: str | None
+    *,
+    request_origin: RequestOrigin,
+    eval_case_id: str | None,
+    eval_run_number: int | None = None,
+    eval_agent_temperature: float | None = None,
 ):
     """Create the canonical root span when tracing was initialized by composition."""
 
@@ -94,6 +100,10 @@ def agent_invocation_span(
     }
     if eval_case_id is not None:
         attributes[ATTR_EVAL_CASE_ID] = eval_case_id
+    if request_origin == "batch" and eval_run_number is not None:
+        attributes[ATTR_EVAL_RUN_NUMBER] = eval_run_number
+    if request_origin == "batch" and eval_agent_temperature is not None:
+        attributes[ATTR_EVAL_AGENT_TEMPERATURE] = eval_agent_temperature
     started = perf_counter()
     with mlflow.start_span(
         name="editorial_team.conversation_invocation",

@@ -99,6 +99,8 @@ def test_conversation_trace_has_one_root_child_llm_metadata_and_redaction(
         f"private input {SECRET}",
         request_origin="batch",
         eval_case_id="case-1",
+        eval_run_number=2,
+        eval_agent_temperature=0.2,
     )
 
     assert messages[0].content == "safe final response"
@@ -114,6 +116,8 @@ def test_conversation_trace_has_one_root_child_llm_metadata_and_redaction(
     assert root.span_type == SpanType.AGENT
     assert root.attributes["request_origin"] == "batch"
     assert root.attributes["eval_case_id"] == "case-1"
+    assert root.attributes["evaluation.run_number"] == 2
+    assert root.attributes["evaluation.agent_temperature"] == 0.2
     assert root.attributes["evaluation.candidate_answer"] == "safe final response"
     assert root.attributes["latency_ms"] >= 0
     assert trace.info.tags["request_origin"] == "batch"

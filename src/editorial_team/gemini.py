@@ -34,11 +34,19 @@ class GeminiModelClient:
         model: str = DEFAULT_GEMINI_MODEL,
         api_key: str | None = None,
         sdk_client: Any | None = None,
+        temperature: float | None = None,
     ) -> None:
         if not isinstance(model, str) or not model.strip():
             raise ValueError("A Gemini model name is required")
 
         self.model = model
+        if temperature is not None and (
+            isinstance(temperature, bool)
+            or not isinstance(temperature, (int, float))
+            or not 0 < temperature <= 2
+        ):
+            raise ValueError("temperature must be greater than zero and at most two")
+        self.temperature = temperature
 
         if sdk_client is not None:
             self._client = sdk_client
@@ -57,6 +65,9 @@ class GeminiModelClient:
 
         if request.tools:
             kwargs["tools"] = list(request.tools)
+
+        if self.temperature is not None:
+            kwargs["generation_config"] = {"temperature": self.temperature}
 
         if request.continuation_token:
             kwargs["previous_interaction_id"] = request.continuation_token
@@ -121,7 +132,7 @@ class GeminiModelClient:
         ]
 
 
-def create_gemini_client_from_env() -> GeminiModelClient:
+def create_gemini_client_from_env(*, temperature: float | None = None) -> GeminiModelClient:
     """Create a Gemini client using environment variables."""
 
     provider = os.getenv("MODEL_PROVIDER", "gemini").strip().lower()
@@ -135,10 +146,12 @@ def create_gemini_client_from_env() -> GeminiModelClient:
         raise ValueError("GEMINI_API_KEY is not configured")
 
     model = os.getenv("AGENT_MODEL", "").strip() or DEFAULT_GEMINI_MODEL
-    return GeminiModelClient(model=model, api_key=api_key)
+    return GeminiModelClient(model=model, api_key=api_key, temperature=temperature)
 
 
-def create_gemini_chat_model_from_env() -> ChatGoogleGenerativeAI:
+def create_gemini_chat_model_from_env(
+    *, temperature: float | None = None
+) -> ChatGoogleGenerativeAI:
     """Create the LangChain chat adapter with the same configured Gemini model."""
 
     provider = os.getenv("MODEL_PROVIDER", "gemini").strip().lower()
@@ -148,4 +161,7 @@ def create_gemini_chat_model_from_env() -> ChatGoogleGenerativeAI:
     if not api_key:
         raise ValueError("GEMINI_API_KEY is not configured")
     model = os.getenv("AGENT_MODEL", "").strip() or DEFAULT_GEMINI_MODEL
-    return ChatGoogleGenerativeAI(model=model, api_key=api_key)
+    kwargs: dict[str, Any] = {"model": model, "api_key": api_key}
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+    return ChatGoogleGenerativeAI(**kwargs)

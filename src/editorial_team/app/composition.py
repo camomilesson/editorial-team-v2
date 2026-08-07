@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -105,6 +106,7 @@ def build_conversation_service(
     coordinator_chat_model: object | None = None,
     retrieval_configuration: RetrievalConfiguration | None = None,
     user_timezone: str = "Europe/Madrid",
+    clock: Callable[[], datetime] | None = None,
 ) -> ConversationService:
     """Wire the real agents around one shared provider-neutral model client."""
 
@@ -117,8 +119,10 @@ def build_conversation_service(
     def identifier_generator() -> str:
         return uuid4().hex
 
-    def clock() -> datetime:
+    def system_clock() -> datetime:
         return datetime.now(UTC)
+
+    evaluation_or_system_clock = clock or system_clock
 
     artifact_store = SQLiteArtifactStore(
         artifact_path or checkpoint_path.with_name("editorial_artifacts.db"),
@@ -160,7 +164,7 @@ def build_conversation_service(
             critic=critic,
             editor=editor,
             identifier_generator=identifier_generator,
-            clock=clock,
+            clock=evaluation_or_system_clock,
             max_recent_messages=RECENT_MESSAGE_LIMIT,
             artifact_store=artifact_store,
             tool_coordinator=tool_coordinator,

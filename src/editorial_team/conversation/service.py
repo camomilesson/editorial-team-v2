@@ -42,6 +42,8 @@ class ConversationService:
         *,
         request_origin: RequestOrigin = "api",
         eval_case_id: str | None = None,
+        eval_run_number: int | None = None,
+        eval_agent_temperature: float | None = None,
     ) -> tuple[Message, ...]:
         """Process one turn and return only its assistant messages."""
 
@@ -51,10 +53,25 @@ class ConversationService:
             request_origin = validate_request_origin(request_origin)
             if eval_case_id is not None:
                 eval_case_id = validate_identifier(eval_case_id, "eval_case_id")
+            if eval_run_number is not None and (
+                isinstance(eval_run_number, bool)
+                or not isinstance(eval_run_number, int)
+                or eval_run_number <= 0
+            ):
+                raise ValueError("eval_run_number must be positive")
+            if eval_agent_temperature is not None and (
+                isinstance(eval_agent_temperature, bool)
+                or not isinstance(eval_agent_temperature, (int, float))
+                or eval_agent_temperature <= 0
+            ):
+                raise ValueError("eval_agent_temperature must be positive")
         except ValueError:
             raise ConversationServiceError("Invalid conversation input") from None
         with agent_invocation_span(
-            request_origin=request_origin, eval_case_id=eval_case_id
+            request_origin=request_origin,
+            eval_case_id=eval_case_id,
+            eval_run_number=eval_run_number,
+            eval_agent_temperature=eval_agent_temperature,
         ) as root_span:
             try:
                 graph_state = self._graph_runner.invoke(

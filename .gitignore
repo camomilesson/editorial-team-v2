@@ -23,6 +23,8 @@ evaluation/.cache/
 .coverage
 htmlcov/
 mlruns/
+evaluation/agent/.runtime/
+evaluation/agent/results.json
 
 # Local runtime databases
 runtime_data/
